@@ -1,0 +1,11 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
