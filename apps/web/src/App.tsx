@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Terminal } from "./components/Terminal";
 import { InputBar } from "./components/InputBar";
 import { ToolApproval } from "./components/ToolApproval";
+import { PlanReviewPanel } from "./components/PlanReview";
 import { ModelSelector } from "./components/ModelSelector";
 import { Sidebar } from "./components/Sidebar";
 import { transport } from "./rpc/wsTransport";
@@ -120,6 +121,7 @@ export function App() {
         </div>
         <Terminal />
         <ToolApproval />
+        <PlanReviewPanel />
         <InputBar />
       </div>
     </div>
