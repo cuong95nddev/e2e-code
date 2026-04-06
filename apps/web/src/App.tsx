@@ -4,6 +4,7 @@ import { InputBar } from "./components/InputBar";
 import { ToolApproval } from "./components/ToolApproval";
 import { PlanReviewPanel } from "./components/PlanReview";
 import { ModelSelector } from "./components/ModelSelector";
+import { PermissionToggle } from "./components/PermissionToggle";
 import { Sidebar } from "./components/Sidebar";
 import { transport } from "./rpc/wsTransport";
 import { useSessionStore } from "./store/sessionStore";
@@ -117,7 +118,10 @@ export function App() {
               {stateLabel[state] ?? state}
             </span>
           </div>
-          <ModelSelector />
+          <div className="flex items-center gap-3">
+            <PermissionToggle />
+            <ModelSelector />
+          </div>
         </div>
         <Terminal />
         <ToolApproval />
