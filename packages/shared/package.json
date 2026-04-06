@@ -1,0 +1,31 @@
+{
+  "name": "@claude-desktop/shared",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./model": {
+      "types": "./src/model.ts",
+      "import": "./src/model.ts"
+    },
+    "./Net": {
+      "types": "./src/Net.ts",
+      "import": "./src/Net.ts"
+    },
+    "./logging": {
+      "types": "./src/logging.ts",
+      "import": "./src/logging.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@claude-desktop/contracts": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}
