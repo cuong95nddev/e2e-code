@@ -1,36 +1,42 @@
 import { useState } from "react";
 import { FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { Separator } from "~/components/ui/separator";
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(true);
 
   if (collapsed) {
     return (
-      <button
+      <Button
         onClick={() => setCollapsed(false)}
-        className="p-2 text-gray-500 hover:text-gray-300"
+        variant="ghost"
+        size="icon-xs"
+        className="m-1"
         title="Open file explorer"
       >
-        <ChevronRight size={16} />
-      </button>
+        <ChevronRight />
+      </Button>
     );
   }
 
   return (
-    <div className="w-64 border-r border-gray-800 flex flex-col bg-gray-950">
-      <div className="flex items-center justify-between p-2 border-b border-gray-800">
-        <div className="flex items-center gap-1 text-gray-400 text-xs">
-          <FolderOpen size={14} />
+    <div className="w-64 border-r border-border flex flex-col bg-card">
+      <div className="flex items-center justify-between px-3 py-2">
+        <div className="flex items-center gap-1.5 text-muted-foreground text-xs font-medium">
+          <FolderOpen className="size-3.5" />
           <span>Files</span>
         </div>
-        <button
+        <Button
           onClick={() => setCollapsed(true)}
-          className="text-gray-500 hover:text-gray-300"
+          variant="ghost"
+          size="icon-xs"
         >
-          <ChevronLeft size={14} />
-        </button>
+          <ChevronLeft />
+        </Button>
       </div>
-      <div className="flex-1 p-2 text-gray-500 text-xs">
+      <Separator />
+      <div className="flex-1 p-3 text-muted-foreground text-xs">
         File explorer — coming soon
       </div>
     </div>

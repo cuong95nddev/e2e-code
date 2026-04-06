@@ -1,5 +1,6 @@
 import { useSessionStore } from "../store/sessionStore";
 import { transport } from "../rpc/wsTransport";
+import { Select, SelectPopup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 
 const MODELS = [
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
@@ -11,22 +12,24 @@ export function ModelSelector() {
   const model = useSessionStore((s) => s.model);
   const sessionId = useSessionStore((s) => s.sessionId);
 
-  const handleChange = (newModel: string) => {
+  const handleChange = (newModel: string | null) => {
+    if (!newModel) return;
     useSessionStore.getState().setModel(newModel);
     if (sessionId) transport.send("setModel", { sessionId, model: newModel });
   };
 
   return (
-    <select
-      value={model}
-      onChange={(e) => handleChange(e.target.value)}
-      className="bg-gray-900 text-gray-300 border border-gray-700 rounded px-2 py-1 text-xs font-mono"
-    >
-      {MODELS.map((m) => (
-        <option key={m.id} value={m.id}>
-          {m.label}
-        </option>
-      ))}
-    </select>
+    <Select value={model} onValueChange={handleChange}>
+      <SelectTrigger size="sm" className="w-32 font-mono text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectPopup>
+        {MODELS.map((m) => (
+          <SelectItem key={m.id} value={m.id}>
+            {m.label}
+          </SelectItem>
+        ))}
+      </SelectPopup>
+    </Select>
   );
 }

@@ -1,6 +1,7 @@
 import { useSessionStore } from "../store/sessionStore";
 import { transport } from "../rpc/wsTransport";
 import { Shield, ShieldCheck, ShieldOff } from "lucide-react";
+import { Select, SelectPopup, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 
 const MODES = [
   { id: "default", label: "Default", Icon: Shield },
@@ -12,7 +13,8 @@ export function PermissionToggle() {
   const mode = useSessionStore((s) => s.permissionMode);
   const sessionId = useSessionStore((s) => s.sessionId);
 
-  const handleChange = (newMode: string) => {
+  const handleChange = (newMode: string | null) => {
+    if (!newMode) return;
     useSessionStore.getState().setPermissionMode(newMode);
     if (sessionId) {
       transport.send("setPermissionMode", { sessionId, permissionMode: newMode });
@@ -23,17 +25,19 @@ export function PermissionToggle() {
   const Icon = current!.Icon;
 
   return (
-    <div className="flex items-center gap-1">
-      <Icon size={14} className="text-gray-500" />
-      <select
-        value={mode}
-        onChange={(e) => handleChange(e.target.value)}
-        className="bg-gray-900 text-gray-300 border border-gray-700 rounded px-2 py-1 text-xs font-mono"
-      >
+    <Select value={mode} onValueChange={handleChange}>
+      <SelectTrigger size="sm" variant="ghost" className="w-auto gap-1.5 font-mono text-xs">
+        <Icon className="size-3.5" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectPopup>
         {MODES.map((m) => (
-          <option key={m.id} value={m.id}>{m.label}</option>
+          <SelectItem key={m.id} value={m.id}>
+            <m.Icon className="size-3.5" />
+            {m.label}
+          </SelectItem>
         ))}
-      </select>
-    </div>
+      </SelectPopup>
+    </Select>
   );
 }

@@ -1,6 +1,9 @@
 import { useSessionStore } from "../store/sessionStore";
 import { transport } from "../rpc/wsTransport";
-import { Check, X } from "lucide-react";
+import { Check, X, FileText } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { Card } from "~/components/ui/card";
+import { ScrollArea } from "~/components/ui/scroll-area";
 
 interface PendingPlanReview {
   requestId: string;
@@ -21,20 +24,25 @@ export function PlanReviewPanel() {
   };
 
   return (
-    <div className="border-t border-blue-800 bg-blue-950/50 p-3 max-h-64 overflow-auto">
-      <div className="text-blue-400 text-sm font-mono mb-2">Plan Review</div>
-      <pre className="text-xs text-gray-300 bg-gray-900 p-3 rounded mb-2 whitespace-pre-wrap">
-        {pending.planMarkdown}
-      </pre>
+    <div className="border-t border-info/32 bg-info/4 p-3">
+      <div className="flex items-center gap-2 mb-2">
+        <FileText className="size-4 text-info" />
+        <span className="text-sm font-medium text-info-foreground">Plan Review</span>
+      </div>
+      <ScrollArea className="max-h-56">
+        <Card className="p-3 mb-3">
+          <pre className="text-xs text-foreground font-mono whitespace-pre-wrap">
+            {pending.planMarkdown}
+          </pre>
+        </Card>
+      </ScrollArea>
       <div className="flex gap-2">
-        <button onClick={() => handleRespond(true)}
-          className="flex items-center gap-1 px-3 py-1 rounded bg-green-700 hover:bg-green-600 text-white text-sm">
-          <Check size={14} /> Approve Plan
-        </button>
-        <button onClick={() => handleRespond(false)}
-          className="flex items-center gap-1 px-3 py-1 rounded bg-red-700 hover:bg-red-600 text-white text-sm">
-          <X size={14} /> Reject
-        </button>
+        <Button onClick={() => handleRespond(true)} size="sm" variant="default">
+          <Check /> Approve Plan
+        </Button>
+        <Button onClick={() => handleRespond(false)} size="sm" variant="destructive">
+          <X /> Reject
+        </Button>
       </div>
     </div>
   );
