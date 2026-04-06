@@ -2,8 +2,6 @@
 
 import { Toast } from "@base-ui/react/toast";
 import { useEffect, type CSSProperties } from "react";
-import { useParams } from "@tanstack/react-router";
-import { ThreadId } from "@t3tools/contracts";
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -20,7 +18,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { buildVisibleToastLayout, shouldHideCollapsedToastContent } from "./toast.logic";
 
 export type ThreadToastData = {
-  threadId?: ThreadId | null;
+  threadId?: string | null;
   tooltipStyle?: boolean;
   dismissAfterVisibleMs?: number;
   hideCopyButton?: boolean;
@@ -72,19 +70,15 @@ interface ToastProviderProps extends Toast.Provider.Props {
 
 function shouldRenderForActiveThread(
   data: ThreadToastData | undefined,
-  activeThreadId: ThreadId | null,
+  activeThreadId: string | null,
 ): boolean {
   const toastThreadId = data?.threadId;
   if (!toastThreadId) return true;
   return toastThreadId === activeThreadId;
 }
 
-function useActiveThreadIdFromRoute(): ThreadId | null {
-  return useParams({
-    strict: false,
-    select: (params) =>
-      typeof params.threadId === "string" ? ThreadId.makeUnsafe(params.threadId) : null,
-  });
+function useActiveThreadIdFromRoute(): string | null {
+  return null;
 }
 
 function ThreadToastVisibleAutoDismiss({
