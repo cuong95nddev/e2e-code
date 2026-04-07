@@ -4,9 +4,9 @@ import * as fs from "node:fs";
 const watch = process.argv.includes("--watch");
 
 const entryPoints = [
-  { in: "src/content-script.ts", out: "dist/content-script" },
-  { in: "src/background.ts",     out: "dist/background" },
-  { in: "src/popup.ts",          out: "dist/popup" },
+  { in: "src/content-script.ts", out: "content-script" },
+  { in: "src/background.ts",     out: "background" },
+  { in: "src/popup.ts",          out: "popup" },
 ];
 
 const ctx = await esbuild.context({
