@@ -168,7 +168,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
 
   const handleMetadata = useCallback(async () => {
     const d = videoRef.current?.duration ?? 0;
-    setDuration(d * 1000);
+    setDuration(isFinite(d) ? d * 1000 : 0);
     if (!dbPath) return;
     const evts = await window.electronAPI.recorder.queryActions(dbPath, 0, d * 1000);
     setEvents(evts);
@@ -189,6 +189,33 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
   // Use chrome events as primary list when no desktop actions were captured
   const useChrome = events.length === 0 && chromeEvents.length > 0;
   const displayEvents = useChrome ? chromeEvents : events;
+
+  // When video has no duration metadata (common with live-recorded .webm), fall back to last event timestamp
+  const effectiveDuration = duration > 0
+    ? duration
+    : (displayEvents.at(-1)?.ts_ms ?? 0);
+
+  // Current AI step text for subtitle overlay
+  const currentSubtitle = (() => {
+    if (!resultContent || frames.length === 0) return null;
+    // Build frame → step text map from AI result
+    const stepByFrame = new Map<string, string>();
+    for (const line of resultContent.split("\n")) {
+      const match = line.match(/^\d+\. (.*)$/);
+      if (!match) continue;
+      const body = match[1]!;
+      const frameMatch = body.match(/^((?:`frame-[^`]+\.jpg`(?:,\s*)?)+)\s*[—-]\s*(.*)$/);
+      if (frameMatch) {
+        const names = [...frameMatch[1]!.matchAll(/`(frame-[^`]+\.jpg)`/g)].map((m) => m[1]!);
+        for (const name of names) stepByFrame.set(name, frameMatch[2]!);
+      }
+    }
+    // Find last frame at or before current time
+    const activeFrame = frames.findLast((f) => f.ts_ms <= currentMs);
+    if (!activeFrame) return null;
+    const name = activeFrame.path.split("/").pop() ?? "";
+    return stepByFrame.get(name) ?? null;
+  })();
 
   const handleAnalyze = useCallback(async () => {
     if (!cwd || !activeSessionId || !videoRef.current || !canvasRef.current) return;
@@ -319,7 +346,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
       {/* Left: video + timeline + events */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* Video */}
-        <div className="bg-black flex-shrink-0">
+        <div className="bg-black flex-shrink-0 relative">
           <video
             ref={videoRef}
             src={`recording://${videoPath}`}
@@ -328,6 +355,13 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
             onLoadedMetadata={handleMetadata}
             onTimeUpdate={handleTimeUpdate}
           />
+          {currentSubtitle && (
+            <div className="absolute bottom-10 left-0 right-0 flex justify-center pointer-events-none px-4">
+              <div className="bg-black/70 text-white text-xs px-3 py-1.5 rounded max-w-[80%] text-center leading-snug">
+                {currentSubtitle}
+              </div>
+            </div>
+          )}
           {displayEvents.length > 0 && (
             <div className="flex items-center justify-end gap-2 px-3 py-1.5">
               <button
@@ -352,20 +386,20 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
         </div>
 
         {/* Timeline */}
-        {duration > 0 && (
+        {effectiveDuration > 0 && (
           <div className="px-4 py-2 border-t border-[#30363d] flex-shrink-0">
             <div
               className="relative h-6 bg-[#161b22] rounded cursor-crosshair"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 const ratio = (e.clientX - rect.left) / rect.width;
-                seekTo(ratio * duration);
+                seekTo(ratio * effectiveDuration);
               }}
             >
               {/* Playhead */}
               <div
                 className="absolute top-0 bottom-0 w-px bg-[#388bfd]"
-                style={{ left: `${(currentMs / duration) * 100}%` }}
+                style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
               />
               {/* Event markers */}
               {displayEvents.map((ev) => (
@@ -373,7 +407,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                   key={ev.id}
                   className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
                   style={{
-                    left: `${(ev.ts_ms / duration) * 100}%`,
+                    left: `${(ev.ts_ms / effectiveDuration) * 100}%`,
                     backgroundColor: TYPE_COLOR[ev.type] ?? "#8b949e",
                   }}
                   onClick={(e) => { e.stopPropagation(); seekTo(ev.ts_ms); }}
@@ -383,7 +417,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
               {/* Time labels */}
               <div className="absolute left-0 bottom-0 text-[9px] text-[#6e7681] translate-y-full pt-0.5">0s</div>
               <div className="absolute right-0 bottom-0 text-[9px] text-[#6e7681] translate-y-full pt-0.5">
-                {formatMs(duration)}
+                {formatMs(effectiveDuration)}
               </div>
             </div>
           </div>
