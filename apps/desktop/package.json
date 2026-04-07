@@ -4,21 +4,17 @@
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "bun run --parallel dev:bundle dev:electron",
-    "dev:bundle": "tsdown --watch",
-    "dev:electron": "electron dist-electron/main.js",
-    "build": "tsdown",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper node_modules/node-pty/prebuilds/darwin-x64/spawn-helper 2>/dev/null || true",
+    "dev": "tsc && ELECTRON_RUN_AS_NODE= electron .",
+    "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "effect": "catalog:",
-    "electron": "40.6.0"
+    "electron": "40.6.0",
+    "node-pty": "^1.1.0"
   },
   "devDependencies": {
-    "@claude-desktop/contracts": "workspace:*",
-    "@claude-desktop/shared": "workspace:*",
     "@types/node": "catalog:",
-    "tsdown": "catalog:",
     "typescript": "catalog:"
   },
   "productName": "Claude Desktop"
