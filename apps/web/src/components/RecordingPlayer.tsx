@@ -1,4 +1,8 @@
 import { useRef, useState, useEffect, useCallback } from "react";
+import { Button } from "~/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import { ScrollArea } from "~/components/ui/scroll-area";
+import { cn } from "~/lib/utils";
 
 interface Props {
   videoPath: string;
@@ -8,15 +12,15 @@ interface Props {
 }
 
 const TYPE_COLOR: Record<string, string> = {
-  mousedown: "#388bfd",
-  mouseup:   "#1f6feb",
-  keydown:   "#3fb950",
-  keyup:     "#238636",
-  wheel:     "#8b949e",
-  click:      "#388bfd",
-  input:      "#3fb950",
-  navigation: "#e3b341",
-  scroll:     "#8b949e",
+  mousedown: "hsl(var(--primary))",
+  mouseup:   "hsl(var(--primary))",
+  keydown:   "#22c55e",
+  keyup:     "#16a34a",
+  wheel:     "hsl(var(--muted-foreground))",
+  click:     "hsl(var(--primary))",
+  input:     "#22c55e",
+  navigation: "#eab308",
+  scroll:    "hsl(var(--muted-foreground))",
 };
 
 function formatMs(ms: number): string {
@@ -86,7 +90,6 @@ function filterKeyEvents(events: ActionEvent[]): ActionEvent[] {
   return result;
 }
 
-// Uses a detached video element so analysis seeking never touches the displayed player.
 async function extractFrame(
   src: string,
   canvas: HTMLCanvasElement,
@@ -134,13 +137,10 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
   const [events, setEvents] = useState<ActionEvent[]>([]);
   const [chromeEvents, setChromeEvents] = useState<ChromeEvent[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
-
   const [resultContent, setResultContent] = useState<string | null>(null);
   const [frames, setFrames] = useState<{ path: string; ts_ms: number }[]>([]);
+  const [eventsDialogOpen, setEventsDialogOpen] = useState(false);
 
-  // Reset player state when a different recording is selected.
-  // Without this, `paused` stays false from a previous playing video, so the
-  // button shows ⏸ and clicks call pause() on an already-paused video.
   useEffect(() => {
     setPaused(true);
     setCurrentMs(0);
@@ -325,10 +325,8 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
     }
   }, [cwd, activeSessionId, events, chromeEvents, useChrome, stem, videoPath]);
 
-  const [eventsDialogOpen, setEventsDialogOpen] = useState(false);
-
   return (
-    <div className="flex h-full font-sans bg-[#0d1117] overflow-hidden">
+    <div className="flex h-full font-sans bg-background overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0">
 
         {/* Video */}
@@ -352,105 +350,115 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
               </div>
             </div>
           )}
-        </div>{/* end containerRef */}
+        </div>
 
         {/* Controls bar */}
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] flex-shrink-0 border-t border-[#30363d]">
-            {/* Play/Pause */}
-            <button
-              onClick={togglePlay}
-              className="text-[#e6edf3] hover:text-white transition-colors flex-shrink-0"
-              title={paused ? "Play" : "Pause"}
-            >
-              {paused ? (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3 2.5l10 5.5-10 5.5V2.5z"/>
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                  <rect x="3" y="2" width="4" height="12" rx="1"/>
-                  <rect x="9" y="2" width="4" height="12" rx="1"/>
-                </svg>
-              )}
-            </button>
-
-            {/* Time */}
-            <span className="text-[10px] text-[#8b949e] font-mono w-28 flex-shrink-0 select-none">
-              {formatMs(currentMs)} / {formatMs(effectiveDuration)}
-            </span>
-
-            <div className="flex-1" />
-
-            {/* Mute */}
-            <button
-              onClick={toggleMute}
-              className="text-[#8b949e] hover:text-[#e6edf3] transition-colors flex-shrink-0"
-              title={muted ? "Unmute" : "Mute"}
-            >
-              {muted ? (
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 2L4 6H1v4h3l4 4V2z"/>
-                  <line x1="11" y1="5" x2="15" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  <line x1="15" y1="5" x2="11" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              ) : (
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M8 2L4 6H1v4h3l4 4V2z"/>
-                  <path d="M11 5.5a3 3 0 010 5M13.5 3.5a6 6 0 010 9" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                </svg>
-              )}
-            </button>
-
-            {/* Fullscreen */}
-            <button
-              onClick={toggleFullscreen}
-              className="text-[#8b949e] hover:text-[#e6edf3] transition-colors flex-shrink-0"
-              title="Fullscreen"
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                <path d="M1 5V1h4M15 5V1h-4M1 11v4h4M15 11v4h-4"/>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-background flex-shrink-0 border-t border-border">
+          {/* Play/Pause */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={togglePlay}
+            className="h-7 w-7 text-foreground flex-shrink-0"
+            title={paused ? "Play" : "Pause"}
+          >
+            {paused ? (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M3 2.5l10 5.5-10 5.5V2.5z"/>
               </svg>
-            </button>
-
-            {/* Events dialog button */}
-            {displayEvents.length > 0 && (
-              <button
-                onClick={() => setEventsDialogOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-[#30363d] bg-[#21262d] text-[#8b949e] text-xs hover:bg-[#30363d] hover:text-[#e6edf3] transition-colors"
-              >
-                Events
-              </button>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                <rect x="3" y="2" width="4" height="12" rx="1"/>
+                <rect x="9" y="2" width="4" height="12" rx="1"/>
+              </svg>
             )}
+          </Button>
 
-            {/* Analyze */}
-            {displayEvents.length > 0 && (
-              <button
-                onClick={handleAnalyze}
-                disabled={analyzing || !cwd || !activeSessionId}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-[#30363d] bg-[#21262d] text-[#e6edf3] text-xs hover:bg-[#30363d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                {analyzing ? (
-                  <><span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />Analyzing…</>
-                ) : (
-                  <><span className="text-[#3fb950]">✦</span>Analyze with Claude</>
-                )}
-              </button>
+          {/* Time */}
+          <span className="text-[10px] text-muted-foreground font-mono w-28 flex-shrink-0 select-none">
+            {formatMs(currentMs)} / {formatMs(effectiveDuration)}
+          </span>
+
+          <div className="flex-1" />
+
+          {/* Mute */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleMute}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground flex-shrink-0"
+            title={muted ? "Unmute" : "Mute"}
+          >
+            {muted ? (
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 2L4 6H1v4h3l4 4V2z"/>
+                <line x1="11" y1="5" x2="15" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <line x1="15" y1="5" x2="11" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 2L4 6H1v4h3l4 4V2z"/>
+                <path d="M11 5.5a3 3 0 010 5M13.5 3.5a6 6 0 010 9" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+              </svg>
             )}
-        </div>{/* end controls */}
+          </Button>
+
+          {/* Fullscreen */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleFullscreen}
+            className="h-7 w-7 text-muted-foreground hover:text-foreground flex-shrink-0"
+            title="Fullscreen"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M1 5V1h4M15 5V1h-4M1 11v4h4M15 11v4h-4"/>
+            </svg>
+          </Button>
+
+          {/* Events dialog button */}
+          {displayEvents.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEventsDialogOpen(true)}
+              className="text-xs h-7"
+            >
+              Events
+            </Button>
+          )}
+
+          {/* Analyze */}
+          {displayEvents.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAnalyze}
+              disabled={analyzing || !cwd || !activeSessionId}
+              className="flex items-center gap-1.5 text-xs h-7"
+            >
+              {analyzing ? (
+                <><span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />Analyzing…</>
+              ) : (
+                <><span className="text-green-400">✦</span>Analyze with Claude</>
+              )}
+            </Button>
+          )}
+        </div>
 
         {/* Timeline */}
         {effectiveDuration > 0 && (
-          <div className="px-4 pt-2 pb-1 border-t border-[#30363d] flex-shrink-0 space-y-1">
+          <div className="px-4 pt-2 pb-1 border-t border-border flex-shrink-0 space-y-1">
             {/* Events row */}
             <div
-              className="relative h-5 bg-[#161b22] rounded cursor-crosshair overflow-hidden"
+              className="relative h-5 bg-card rounded cursor-crosshair overflow-hidden"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 seekTo(((e.clientX - rect.left) / rect.width) * effectiveDuration);
               }}
             >
               <div
-                className="absolute top-0 bottom-0 w-px bg-[#388bfd]"
+                className="absolute top-0 bottom-0 w-px bg-primary"
                 style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
               />
               {displayEvents.map((ev) => (
@@ -459,7 +467,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                   className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
                   style={{
                     left: `${(ev.ts_ms / effectiveDuration) * 100}%`,
-                    backgroundColor: TYPE_COLOR[ev.type] ?? "#8b949e",
+                    backgroundColor: TYPE_COLOR[ev.type] ?? "hsl(var(--muted-foreground))",
                   }}
                   onClick={(e) => { e.stopPropagation(); seekTo(ev.ts_ms); }}
                   title={`${formatMs(ev.ts_ms)} ${ev.type}`}
@@ -485,14 +493,14 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
               }
               return (
                 <div
-                  className="relative h-5 bg-[#161b22] rounded cursor-crosshair overflow-hidden"
+                  className="relative h-5 bg-card rounded cursor-crosshair overflow-hidden"
                   onClick={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
                     seekTo(((e.clientX - rect.left) / rect.width) * effectiveDuration);
                   }}
                 >
                   <div
-                    className="absolute top-0 bottom-0 w-px bg-[#388bfd]"
+                    className="absolute top-0 bottom-0 w-px bg-primary"
                     style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
                   />
                   {frames.map((f) => {
@@ -505,7 +513,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                         className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
                         style={{
                           left: `${(f.ts_ms / effectiveDuration) * 100}%`,
-                          backgroundColor: isActive ? "#e3b341" : "#6e7681",
+                          backgroundColor: isActive ? "#eab308" : "hsl(var(--muted-foreground))",
                         }}
                         onClick={(e) => { e.stopPropagation(); seekTo(f.ts_ms); }}
                         title={label ? `${formatMs(f.ts_ms)} — ${label}` : formatMs(f.ts_ms)}
@@ -517,8 +525,8 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
             })()}
 
             <div className="flex justify-between">
-              <span className="text-[9px] text-[#6e7681]">0s</span>
-              <span className="text-[9px] text-[#6e7681]">{formatMs(effectiveDuration)}</span>
+              <span className="text-[9px] text-muted-foreground">0s</span>
+              <span className="text-[9px] text-muted-foreground">{formatMs(effectiveDuration)}</span>
             </div>
           </div>
         )}
@@ -527,37 +535,46 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
       </div>
 
       {/* Events dialog */}
-      {eventsDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setEventsDialogOpen(false)}>
-          <div
-            className="bg-[#161b22] border border-[#30363d] rounded-lg w-[560px] max-h-[70vh] flex flex-col shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-[#30363d] flex-shrink-0">
-              <span className="text-xs font-semibold text-[#e6edf3]">Events ({displayEvents.length})</span>
-              <button onClick={() => setEventsDialogOpen(false)} className="text-[#6e7681] hover:text-white text-sm leading-none">×</button>
-            </div>
-            <div className="overflow-y-auto flex-1 px-3 py-2">
+      <Dialog open={eventsDialogOpen} onOpenChange={setEventsDialogOpen}>
+        <DialogContent className="w-[560px] max-h-[70vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="px-4 py-3 border-b border-border flex-shrink-0">
+            <DialogTitle className="text-xs font-semibold">
+              Events ({displayEvents.length})
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex-1">
+            <div className="px-3 py-2">
               {displayEvents.map((ev, i) => (
                 <button
                   key={ev.id}
                   onClick={() => { seekTo(ev.ts_ms); setEventsDialogOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-2 py-1 rounded text-left hover:bg-[#21262d] transition-colors ${
-                    ev.ts_ms <= currentMs && (displayEvents[i + 1]?.ts_ms ?? Infinity) > currentMs ? "bg-[#21262d]" : ""
-                  }`}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-2 py-1 rounded text-left hover:bg-accent transition-colors",
+                    ev.ts_ms <= currentMs && (displayEvents[i + 1]?.ts_ms ?? Infinity) > currentMs
+                      ? "bg-accent"
+                      : ""
+                  )}
                 >
-                  <span className="text-[10px] text-[#8b949e] font-mono w-16 flex-shrink-0">{formatMs(ev.ts_ms)}</span>
-                  <span className="text-[10px] w-14 flex-shrink-0 font-mono" style={{ color: TYPE_COLOR[ev.type] ?? "#8b949e" }}>{formatType(ev.type)}</span>
-                  <span className="text-[10px] text-[#6e7681] truncate">
-                    {useChrome ? describeChromeEvent(ev as ChromeEvent) : getRichLabel(ev as ActionEvent, chromeEvents)}
+                  <span className="text-[10px] text-muted-foreground font-mono w-16 flex-shrink-0">
+                    {formatMs(ev.ts_ms)}
+                  </span>
+                  <span
+                    className="text-[10px] w-14 flex-shrink-0 font-mono"
+                    style={{ color: TYPE_COLOR[ev.type] ?? "hsl(var(--muted-foreground))" }}
+                  >
+                    {formatType(ev.type)}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground truncate">
+                    {useChrome
+                      ? describeChromeEvent(ev as ChromeEvent)
+                      : getRichLabel(ev as ActionEvent, chromeEvents)}
                   </span>
                 </button>
               ))}
             </div>
-          </div>
-        </div>
-      )}
-
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
