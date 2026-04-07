@@ -1,5 +1,4 @@
 import * as FS from "node:fs";
-import * as OS from "node:os";
 import * as Path from "node:path";
 import { ipcMain, desktopCapturer, globalShortcut, BrowserWindow, screen } from "electron";
 
@@ -60,32 +59,26 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
 
   // --- saveFile ---
   ipcMain.handle("recorder:saveFile", async (_event, cwd: string, buffer: ArrayBuffer) => {
+    if (!cwd || !Path.isAbsolute(cwd)) throw new Error(`Invalid cwd: ${cwd}`);
     const dir = Path.join(cwd, "recordings");
-    FS.mkdirSync(dir, { recursive: true });
-    const ts = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+    await FS.promises.mkdir(dir, { recursive: true });
+    const ts = new Date().toISOString().slice(0, 23).replace(/[:.]/g, "-");
     const filePath = Path.join(dir, `${ts}.webm`);
-    FS.writeFileSync(filePath, Buffer.from(buffer));
+    await FS.promises.writeFile(filePath, Buffer.from(buffer));
     return filePath;
   });
 
   // --- openOverlay ---
-  ipcMain.handle("recorder:openOverlay", async (_event, screenSourceId: string) => {
-    // Map source index to display bounds
+  ipcMain.handle("recorder:openOverlay", (_event, screenSourceId: string) => {
     const displays = screen.getAllDisplays();
     const sourceIndex = parseInt(screenSourceId.split(":")[1] ?? "0", 10);
+    // Note: display index mapping from desktopCapturer source ID is a best-effort
+    // approximation. Window sources (large N) always fall back to the primary display.
     const display = displays[sourceIndex] ?? displays[0]!;
     const { x, y, width, height } = display.bounds;
 
     return new Promise<{ x: number; y: number; width: number; height: number } | null>((resolve) => {
       let settled = false;
-      const settle = (val: { x: number; y: number; width: number; height: number } | null) => {
-        if (settled) return;
-        settled = true;
-        ipcMain.removeAllListeners("overlay:result");
-        ipcMain.removeAllListeners("overlay:cancel");
-        if (!overlayWin.isDestroyed()) overlayWin.close();
-        resolve(val);
-      };
 
       const overlayWin = new BrowserWindow({
         x, y, width, height,
@@ -100,16 +93,25 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
         },
       });
 
-      // Write overlay HTML to temp file and load it
-      const tmpHtml = Path.join(OS.tmpdir(), "e2e-code-overlay.html");
-      FS.writeFileSync(tmpHtml, OVERLAY_HTML);
-      overlayWin.loadFile(tmpHtml);
+      const dataUri = `data:text/html;charset=utf-8,${encodeURIComponent(OVERLAY_HTML)}`;
+      overlayWin.loadURL(dataUri);
 
-      ipcMain.once("overlay:result", (_e, region: { x: number; y: number; width: number; height: number }) => {
+      const settle = (val: { x: number; y: number; width: number; height: number } | null) => {
+        if (settled) return;
+        settled = true;
+        ipcMain.removeListener("overlay:result", resultHandler);
+        ipcMain.removeListener("overlay:cancel", cancelHandler);
+        if (!overlayWin.isDestroyed()) overlayWin.close();
+        resolve(val);
+      };
+
+      const resultHandler = (_e: Electron.IpcMainEvent, region: { x: number; y: number; width: number; height: number }) => {
         settle({ x: region.x, y: region.y, width: region.width, height: region.height });
-      });
+      };
+      const cancelHandler = () => settle(null);
 
-      ipcMain.once("overlay:cancel", () => settle(null));
+      ipcMain.on("overlay:result", resultHandler);
+      ipcMain.on("overlay:cancel", cancelHandler);
       overlayWin.on("closed", () => settle(null));
     });
   });
