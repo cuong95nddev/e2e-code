@@ -17,12 +17,17 @@ export function RecordButton({ cwd }: Props) {
   // Load sources whenever picker opens
   useEffect(() => {
     if (!pickerOpen) return;
+    let cancelled = false;
     window.electronAPI.recorder.getSources().then((srcs) => {
+      if (cancelled) return;
       setSources(srcs);
       // Auto-select first screen source
       const firstScreen = srcs.find((s) => s.id.startsWith("screen:"));
-      if (firstScreen && !selectedSourceId) setSelectedSourceId(firstScreen.id);
+      if (firstScreen) {
+        setSelectedSourceId((current) => current ?? firstScreen.id);
+      }
     });
+    return () => { cancelled = true; };
   }, [pickerOpen]);
 
   // Reset source selection when mode changes
@@ -71,16 +76,12 @@ export function RecordButton({ cwd }: Props) {
     await startRecording({ sourceId: sourceId!, mode, ...(cropRegion ? { cropRegion } : {}), cwd });
   };
 
-  const handleStop = async () => {
-    await stopRecording();
-  };
-
   const sourcesForMode = mode === "window" ? windowSources : screenSources;
 
   if (recorderState === "recording") {
     return (
       <>
-        <RecordingIndicator elapsed={elapsed} onStop={handleStop} />
+        <RecordingIndicator elapsed={elapsed} onStop={stopRecording} />
         {toast && (
           <div className="fixed bottom-4 right-4 z-50 bg-[#161b22] border border-[#30363d] text-[#e6edf3] text-xs px-4 py-2 rounded-lg shadow-lg">
             {toast}
