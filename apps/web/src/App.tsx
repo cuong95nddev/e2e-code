@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Terminal } from "./components/Terminal";
-import { RecordButton } from "./components/RecordButton";
 import { RecordingsList } from "./components/RecordingsList";
 import { RecordingPlayer } from "./components/RecordingPlayer";
 
@@ -25,9 +24,13 @@ export function App() {
   const [selectedRecording, setSelectedRecording] = useState<RecordingMeta | null>(null);
   const [terminalHeight, setTerminalHeight] = useState(300);
   const [terminalVisible, setTerminalVisible] = useState(true);
+  const [leftWidth, setLeftWidth] = useState(288);
   const isDragging = useRef(false);
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
+  const isLeftDragging = useRef(false);
+  const leftDragStartX = useRef(0);
+  const leftDragStartWidth = useRef(0);
 
   const createSession = useCallback(async (cwd?: string) => {
     const folder = cwd ?? (await window.electronAPI.app.pickFolder());
@@ -75,6 +78,43 @@ export function App() {
     window.electronAPI.pty.create(id, session.cwd, null, false);
   }, [sessions]);
 
+  // Drag-to-resize handlers
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (isDragging.current) {
+        const delta = dragStartY.current - e.clientY;
+        const newHeight = Math.max(150, Math.min(dragStartHeight.current + delta, window.innerHeight * 0.8));
+        setTerminalHeight(newHeight);
+      }
+      if (isLeftDragging.current) {
+        const delta = e.clientX - leftDragStartX.current;
+        const newWidth = Math.max(160, Math.min(leftDragStartWidth.current + delta, window.innerWidth * 0.5));
+        setLeftWidth(newWidth);
+      }
+    };
+    const onMouseUp = () => { isDragging.current = false; isLeftDragging.current = false; };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    isDragging.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = terminalHeight;
+    e.preventDefault();
+  };
+
+  const handleLeftDragStart = (e: React.MouseEvent) => {
+    isLeftDragging.current = true;
+    leftDragStartX.current = e.clientX;
+    leftDragStartWidth.current = leftWidth;
+    e.preventDefault();
+  };
+
   // Keep chrome-bridge cwd in sync with active session so recordings land in the right folder
   useEffect(() => {
     const cwd = sessions.find((s) => s.id === activeSessionId)?.cwd;
@@ -108,30 +148,6 @@ export function App() {
     }
   }, []);
 
-  // Drag-to-resize terminal panel
-  useEffect(() => {
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current) return;
-      const delta = dragStartY.current - e.clientY;
-      const newHeight = Math.max(150, Math.min(dragStartHeight.current + delta, window.innerHeight * 0.8));
-      setTerminalHeight(newHeight);
-    };
-    const onMouseUp = () => { isDragging.current = false; };
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-  }, []);
-
-  const handleDragStart = (e: React.MouseEvent) => {
-    isDragging.current = true;
-    dragStartY.current = e.clientY;
-    dragStartHeight.current = terminalHeight;
-    e.preventDefault();
-  };
-
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const folderName = (cwd: string) => cwd.split("/").pop() ?? cwd;
 
@@ -145,38 +161,7 @@ export function App() {
         {/* macOS traffic light spacing */}
         <div className="w-20 flex-shrink-0" />
 
-        <div
-          className="flex items-center gap-0.5 overflow-x-auto flex-1 px-1"
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
-          {sessions.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setActiveSessionId(s.id)}
-              className={`
-                flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-mono
-                transition-colors whitespace-nowrap max-w-[200px]
-                ${s.id === activeSessionId
-                  ? "bg-[#161b22] text-[#e6edf3]"
-                  : "text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]"
-                }
-                ${s.exited ? "opacity-60" : ""}
-              `}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                s.exited ? "bg-red-500" : "bg-green-500"
-              }`} />
-              <span className="truncate">{folderName(s.cwd)}</span>
-              <span
-                onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}
-                className="ml-1 text-[#8b949e] hover:text-white cursor-pointer"
-              >
-                x
-              </span>
-            </button>
-          ))}
-
-        </div>
+        <div className="flex-1" />
       </div>
 
       {/* Main content area */}
@@ -184,11 +169,7 @@ export function App() {
         {/* Top content — two columns */}
         <div className="flex-1 min-h-0 flex overflow-hidden">
           {/* Left: actions + recordings list */}
-          <div className="w-72 flex-shrink-0 flex flex-col border-r border-[#30363d] p-3 overflow-y-auto">
-            <RecordButton
-              cwd={activeSession?.cwd ?? null}
-              onSaved={() => { setRecordingRefreshKey((k) => k + 1); }}
-            />
+          <div className="flex-shrink-0 flex flex-col border-r border-[#30363d] p-3 overflow-y-auto" style={{ width: leftWidth }}>
             <RecordingsList
               cwd={activeSession?.cwd ?? null}
               refreshKey={recordingRefreshKey}
@@ -206,6 +187,12 @@ export function App() {
               </div>
             )}
           </div>
+
+          {/* Left/Right resize handle */}
+          <div
+            className="w-1 flex-shrink-0 bg-[#30363d] hover:bg-[#388bfd] cursor-col-resize transition-colors"
+            onMouseDown={handleLeftDragStart}
+          />
 
           {/* Right: video player */}
           <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
@@ -230,17 +217,14 @@ export function App() {
         {/* Terminal panel */}
         {terminalVisible ? (
           <>
-            {/* Drag handle */}
             <div
               className="h-1 bg-[#30363d] hover:bg-[#388bfd] cursor-ns-resize transition-colors flex-shrink-0"
               onMouseDown={handleDragStart}
             />
-            {/* Terminal header */}
             <div className="flex items-center h-8 bg-[#010409] border-t border-[#30363d] flex-shrink-0 px-2 gap-1">
               <span className="text-[10px] text-[#6e7681] uppercase tracking-widest font-sans px-1">
                 Terminal
               </span>
-              {/* Session tabs */}
               <div className="flex items-center gap-0.5 flex-1 overflow-x-auto">
                 {sessions.map((s) => (
                   <button
@@ -249,57 +233,28 @@ export function App() {
                     className={`
                       flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap max-w-[160px]
                       transition-colors
-                      ${s.id === activeSessionId
-                        ? "bg-[#161b22] text-[#e6edf3]"
-                        : "text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]"
-                      }
+                      ${s.id === activeSessionId ? "bg-[#161b22] text-[#e6edf3]" : "text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]"}
                       ${s.exited ? "opacity-60" : ""}
                     `}
                   >
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.exited ? "bg-red-500" : "bg-green-500"}`} />
                     <span className="truncate">{folderName(s.cwd)}</span>
-                    <span
-                      onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}
-                      className="ml-0.5 text-[#8b949e] hover:text-white cursor-pointer"
-                    >
-                      ×
-                    </span>
+                    <span onClick={(e) => { e.stopPropagation(); closeSession(s.id); }} className="ml-0.5 text-[#8b949e] hover:text-white cursor-pointer">×</span>
                   </button>
                 ))}
-                <button
-                  onClick={() => createSession()}
-                  className="px-1.5 py-0.5 text-[#8b949e] hover:text-white text-sm leading-none"
-                >
-                  +
-                </button>
+                <button onClick={() => createSession()} className="px-1.5 py-0.5 text-[#8b949e] hover:text-white text-sm leading-none">+</button>
               </div>
-              <button
-                onClick={() => setTerminalVisible(false)}
-                className="text-[#6e7681] hover:text-white text-sm leading-none flex-shrink-0"
-              >
-                ×
-              </button>
+              <button onClick={() => setTerminalVisible(false)} className="text-[#6e7681] hover:text-white text-sm leading-none flex-shrink-0">×</button>
             </div>
-            {/* Terminal content */}
             <div className="relative flex-shrink-0" style={{ height: terminalHeight }}>
               {sessions.map((s) => (
                 <div key={s.id} className={`absolute inset-0 ${s.id === activeSessionId ? "" : "hidden"}`}>
-                  <Terminal
-                    sessionId={s.id}
-                    visible={s.id === activeSessionId}
-                  />
+                  <Terminal sessionId={s.id} visible={s.id === activeSessionId} />
                   {s.exited && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/60">
                       <div className="text-center">
-                        <p className="text-[#8b949e] mb-3">
-                          Process exited (code: {s.exitCode})
-                        </p>
-                        <button
-                          onClick={() => restartSession(s.id)}
-                          className="px-4 py-2 bg-[#238636] text-white rounded-md text-sm hover:bg-[#2ea043]"
-                        >
-                          Restart
-                        </button>
+                        <p className="text-[#8b949e] mb-3">Process exited (code: {s.exitCode})</p>
+                        <button onClick={() => restartSession(s.id)} className="px-4 py-2 bg-[#238636] text-white rounded-md text-sm hover:bg-[#2ea043]">Restart</button>
                       </div>
                     </div>
                   )}
@@ -308,12 +263,8 @@ export function App() {
             </div>
           </>
         ) : (
-          /* Show terminal toggle button at bottom when hidden */
           <div className="flex items-center h-7 bg-[#010409] border-t border-[#30363d] px-3 flex-shrink-0">
-            <button
-              onClick={() => setTerminalVisible(true)}
-              className="text-[10px] text-[#6e7681] uppercase tracking-widest hover:text-white font-sans transition-colors"
-            >
+            <button onClick={() => setTerminalVisible(true)} className="text-[10px] text-[#6e7681] uppercase tracking-widest hover:text-white font-sans transition-colors">
               Terminal
             </button>
           </div>

@@ -1,5 +1,4 @@
 import { useRef, useState, useEffect, useCallback } from "react";
-import { AnalysisPanel } from "./AnalysisPanel";
 
 interface Props {
   videoPath: string;
@@ -14,7 +13,6 @@ const TYPE_COLOR: Record<string, string> = {
   keydown:   "#3fb950",
   keyup:     "#238636",
   wheel:     "#8b949e",
-  // chrome event types
   click:      "#388bfd",
   input:      "#3fb950",
   navigation: "#e3b341",
@@ -81,20 +79,28 @@ function filterKeyEvents(events: ActionEvent[]): ActionEvent[] {
     if (e.type === "mousedown") {
       result.push(e);
     } else if (e.type === "keydown") {
-      if (e.ts_ms - lastKeydownTs > 500) {
-        result.push(e);
-      }
+      if (e.ts_ms - lastKeydownTs > 500) result.push(e);
       lastKeydownTs = e.ts_ms;
     }
   }
   return result;
 }
 
+// Uses a detached video element so analysis seeking never touches the displayed player.
 async function extractFrame(
-  video: HTMLVideoElement,
+  src: string,
   canvas: HTMLCanvasElement,
   tsMs: number,
 ): Promise<ArrayBuffer> {
+  const video = document.createElement("video");
+  video.src = src;
+  video.muted = true;
+  video.preload = "auto";
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error("video load error"));
+    video.load();
+  });
   await new Promise<void>((resolve) => {
     const onSeeked = () => { video.removeEventListener("seeked", onSeeked); resolve(); };
     video.addEventListener("seeked", onSeeked);
@@ -104,15 +110,13 @@ async function extractFrame(
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   ctx.drawImage(video, 0, 0);
+  video.src = "";
   return new Promise<ArrayBuffer>((resolve) => {
-    canvas.toBlob((blob) => {
-      blob!.arrayBuffer().then(resolve);
-    }, "image/jpeg", 0.85);
+    canvas.toBlob((blob) => blob!.arrayBuffer().then(resolve), "image/jpeg", 0.85);
   });
 }
 
 function getRichLabel(ev: ActionEvent, chromeEvents: ChromeEvent[]): string {
-  // Find chrome event within ±100ms
   const ce = chromeEvents.find((c) => Math.abs(c.ts_ms - ev.ts_ms) <= 100);
   if (!ce) return describeEvent(ev);
   return describeChromeEvent(ce);
@@ -120,19 +124,32 @@ function getRichLabel(ev: ActionEvent, chromeEvents: ChromeEvent[]): string {
 
 export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [events, setEvents] = useState<ActionEvent[]>([]);
-  const [chromeEvents, setChromeEvents] = useState<ChromeEvent[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const [paused, setPaused] = useState(true);
+  const [muted, setMuted] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentMs, setCurrentMs] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [events, setEvents] = useState<ActionEvent[]>([]);
+  const [chromeEvents, setChromeEvents] = useState<ChromeEvent[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
 
-  // Analysis panel state
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [panelWidth, setPanelWidth] = useState(360);
   const [resultContent, setResultContent] = useState<string | null>(null);
   const [frames, setFrames] = useState<{ path: string; ts_ms: number }[]>([]);
+
+  // Reset player state when a different recording is selected.
+  // Without this, `paused` stays false from a previous playing video, so the
+  // button shows ⏸ and clicks call pause() on an already-paused video.
+  useEffect(() => {
+    setPaused(true);
+    setCurrentMs(0);
+    setDuration(0);
+    setEvents([]);
+    setChromeEvents([]);
+    setResultContent(null);
+    setFrames([]);
+  }, [videoPath]);
 
   const stem = videoPath.split("/").pop()?.replace(".webm", "") ?? "recording";
   const stemDir = cwd ? `${cwd}/recordings/${stem}` : null;
@@ -148,37 +165,31 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
     if (content) {
       setResultContent(content);
       setFrames(frameList);
-      setPanelOpen(true);
     }
   }, [resultPath, framesDir]);
 
-  // On mount: check if result already exists, then start watching
   useEffect(() => {
     if (!stemDir) return;
     loadResult();
     window.electronAPI.recorder.watchResult(stemDir);
-    const off = window.electronAPI.recorder.onAnalysisReady(() => {
-      loadResult();
-    });
-    return () => {
-      off();
-      window.electronAPI.recorder.unwatchResult(stemDir);
-    };
+    const off = window.electronAPI.recorder.onAnalysisReady(() => loadResult());
+    return () => { off(); window.electronAPI.recorder.unwatchResult(stemDir); };
   }, [stemDir, loadResult]);
 
   const handleMetadata = useCallback(async () => {
     const d = videoRef.current?.duration ?? 0;
-    setDuration(isFinite(d) ? d * 1000 : 0);
+    setDuration(isFinite(d) && d > 0 ? d * 1000 : 0);
     if (!dbPath) return;
-    const evts = await window.electronAPI.recorder.queryActions(dbPath, 0, d * 1000);
+    const [evts, cevts] = await Promise.all([
+      window.electronAPI.recorder.queryActions(dbPath, 0, d * 1000),
+      window.electronAPI.recorder.queryChrome(dbPath, 0, d * 1000),
+    ]);
     setEvents(evts);
-    const cevts = await window.electronAPI.recorder.queryChrome(dbPath, 0, d * 1000);
     setChromeEvents(cevts);
   }, [dbPath]);
 
   const handleTimeUpdate = useCallback(() => {
-    const ms = (videoRef.current?.currentTime ?? 0) * 1000;
-    setCurrentMs(ms);
+    setCurrentMs((videoRef.current?.currentTime ?? 0) * 1000);
   }, []);
 
   const seekTo = useCallback((ms: number) => {
@@ -186,19 +197,32 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
     videoRef.current.currentTime = ms / 1000;
   }, []);
 
-  // Use chrome events as primary list when no desktop actions were captured
+  const togglePlay = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play().catch(() => {}); else v.pause();
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setMuted(v.muted);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else el.requestFullscreen();
+  }, []);
+
   const useChrome = events.length === 0 && chromeEvents.length > 0;
   const displayEvents = useChrome ? chromeEvents : events;
+  const effectiveDuration = duration > 0 ? duration : (displayEvents.at(-1)?.ts_ms ?? 0);
 
-  // When video has no duration metadata (common with live-recorded .webm), fall back to last event timestamp
-  const effectiveDuration = duration > 0
-    ? duration
-    : (displayEvents.at(-1)?.ts_ms ?? 0);
-
-  // Current AI step text for subtitle overlay
   const currentSubtitle = (() => {
     if (!resultContent || frames.length === 0) return null;
-    // Build frame → step text map from AI result
     const stepByFrame = new Map<string, string>();
     for (const line of resultContent.split("\n")) {
       const match = line.match(/^\d+\. (.*)$/);
@@ -210,33 +234,31 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
         for (const name of names) stepByFrame.set(name, frameMatch[2]!);
       }
     }
-    // Find last frame at or before current time
     const activeFrame = frames.findLast((f) => f.ts_ms <= currentMs);
     if (!activeFrame) return null;
-    const name = activeFrame.path.split("/").pop() ?? "";
-    return stepByFrame.get(name) ?? null;
+    return stepByFrame.get(activeFrame.path.split("/").pop() ?? "") ?? null;
   })();
 
   const handleAnalyze = useCallback(async () => {
-    if (!cwd || !activeSessionId || !videoRef.current || !canvasRef.current) return;
+    if (!cwd || !activeSessionId || !canvasRef.current) return;
     setAnalyzing(true);
+    const src = `recording://${videoPath}`;
     try {
-      const framesDir = `${cwd}/recordings/${stem}/frames`;
-
-      // --- Frames table ---
+      const framesDirPath = `${cwd}/recordings/${stem}/frames`;
       type FrameRow = { relPath: string; time: string };
       const frameRows: FrameRow[] = [];
       const seenFrames = new Set<string>();
-
-      // --- Action event rows ---
       type EventRow = { num: number; time: string; frame: string; cols: string[] };
       const eventRows: EventRow[] = [];
 
+      const cell = (v: string | number | null | undefined) =>
+        v == null || v === "" ? "" : String(v).replace(/\|/g, "\\|").replace(/\n/g, " ");
+
       const saveFrameFor = async (ts_ms: number): Promise<string> => {
-        const framePath = `${framesDir}/frame-${ts_ms}.jpg`;
+        const framePath = `${framesDirPath}/frame-${ts_ms}.jpg`;
         const relPath = `recordings/${stem}/frames/frame-${ts_ms}.jpg`;
         if (!seenFrames.has(relPath)) {
-          const buffer = await extractFrame(videoRef.current!, canvasRef.current!, ts_ms);
+          const buffer = await extractFrame(src, canvasRef.current!, ts_ms);
           await window.electronAPI.recorder.saveFrame(framePath, buffer);
           seenFrames.add(relPath);
           frameRows.push({ relPath, time: formatMs(ts_ms) });
@@ -244,31 +266,17 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
         return relPath;
       };
 
-      const cell = (v: string | number | null | undefined) =>
-        v == null || v === "" ? "" : String(v).replace(/\|/g, "\\|").replace(/\n/g, " ");
-
       if (useChrome) {
         for (let i = 0; i < chromeEvents.length; i++) {
           const ce = chromeEvents[i]!;
           const frame = await saveFrameFor(ce.ts_ms);
           eventRows.push({
-            num: i + 1,
-            time: formatMs(ce.ts_ms),
-            frame,
+            num: i + 1, time: formatMs(ce.ts_ms), frame,
             cols: [
-              cell(ce.type),
-              cell(ce.url),
-              cell(ce.page_title),
-              cell(ce.el_tag),
-              cell(ce.el_id),
-              cell(ce.el_text),
-              cell(ce.el_aria_label),
-              cell(ce.el_role),
-              cell(ce.el_placeholder),
-              cell(ce.el_testid),
-              cell(ce.el_selector),
-              cell(ce.input_value),
-              ce.x != null ? `(${ce.x},${ce.y})` : "",
+              cell(ce.type), cell(ce.url), cell(ce.page_title), cell(ce.el_tag),
+              cell(ce.el_id), cell(ce.el_text), cell(ce.el_aria_label), cell(ce.el_role),
+              cell(ce.el_placeholder), cell(ce.el_testid), cell(ce.el_selector),
+              cell(ce.input_value), ce.x != null ? `(${ce.x},${ce.y})` : "",
             ],
           });
         }
@@ -278,35 +286,19 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
           const ev = keyEvents[i]!;
           const frame = await saveFrameFor(ev.ts_ms);
           eventRows.push({
-            num: i + 1,
-            time: formatMs(ev.ts_ms),
-            frame,
+            num: i + 1, time: formatMs(ev.ts_ms), frame,
             cols: [
-              cell(ev.type),
-              ev.x != null ? `(${ev.x},${ev.y})` : "",
-              cell(ev.button),
-              cell(ev.keycode),
-              cell(ev.key_char),
-              cell(ev.modifiers),
-              ev.delta_y != null ? `${ev.delta_x},${ev.delta_y}` : "",
+              cell(ev.type), ev.x != null ? `(${ev.x},${ev.y})` : "",
+              cell(ev.button), cell(ev.keycode), cell(ev.key_char),
+              cell(ev.modifiers), ev.delta_y != null ? `${ev.delta_x},${ev.delta_y}` : "",
             ],
           });
         }
       }
 
-      // Build markdown
-      const frameHeader = `| Frame | Time |`;
-      const frameSep = `|-------|------|`;
-      const frameTableRows = frameRows.map((r) => `| ${r.relPath} | ${r.time} |`);
-
       const eventCols = useChrome
         ? ["Type", "URL", "Page Title", "Tag", "ID", "Text", "Aria Label", "Role", "Placeholder", "Test ID", "Selector", "Input Value", "Position"]
         : ["Type", "Position", "Button", "Keycode", "Key", "Modifiers", "Delta"];
-      const eventHeader = `| # | Time | Frame | ${eventCols.join(" | ")} |`;
-      const eventSep = `|---|------|-------|${eventCols.map(() => "------").join("|")}|`;
-      const eventTableRows = eventRows.map(
-        (r) => `| ${r.num} | ${r.time} | ${r.frame} | ${r.cols.join(" | ")} |`
-      );
 
       const content = [
         `# Recording Analysis Task`,
@@ -315,14 +307,14 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
         `Invoke the /analyze-recording skill to analyze this recording.`,
         ``,
         `## Frames`,
-        frameHeader,
-        frameSep,
-        ...frameTableRows,
+        `| Frame | Time |`,
+        `|-------|------|`,
+        ...frameRows.map((r) => `| ${r.relPath} | ${r.time} |`),
         ``,
         `## Action Events`,
-        eventHeader,
-        eventSep,
-        ...eventTableRows,
+        `| # | Time | Frame | ${eventCols.join(" | ")} |`,
+        `|---|------|-------|${eventCols.map(() => "------").join("|")}|`,
+        ...eventRows.map((r) => `| ${r.num} | ${r.time} | ${r.frame} | ${r.cols.join(" | ")} |`),
       ].join("\n");
 
       const promptPath = `${cwd}/recordings/${stem}/analyze.md`;
@@ -331,77 +323,136 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
     } finally {
       setAnalyzing(false);
     }
-  }, [cwd, activeSessionId, events, chromeEvents, useChrome, stem]);
+  }, [cwd, activeSessionId, events, chromeEvents, useChrome, stem, videoPath]);
 
-  useEffect(() => {
-    if (!listRef.current || displayEvents.length === 0) return;
-    const idx = displayEvents.findIndex((e) => e.ts_ms > currentMs) - 1;
-    if (idx < 0) return;
-    const el = listRef.current.children[idx] as HTMLElement | undefined;
-    el?.scrollIntoView({ block: "nearest" });
-  }, [currentMs, displayEvents]);
+  const [eventsDialogOpen, setEventsDialogOpen] = useState(false);
 
   return (
     <div className="flex h-full font-sans bg-[#0d1117] overflow-hidden">
-      {/* Left: video + timeline + events */}
       <div className="flex flex-col flex-1 min-w-0">
+
         {/* Video */}
-        <div className="bg-black flex-shrink-0 relative">
+        <div ref={containerRef} className="bg-black flex-1 min-h-0 relative">
           <video
             ref={videoRef}
             src={`recording://${videoPath}`}
-            controls
-            className="w-full max-h-[45vh] object-contain"
+            className="w-full h-full object-contain block"
             onLoadedMetadata={handleMetadata}
             onTimeUpdate={handleTimeUpdate}
+            onPlay={() => setPaused(false)}
+            onPause={() => setPaused(true)}
+            onEnded={() => setPaused(true)}
           />
+
+          {/* Subtitle */}
           {currentSubtitle && (
-            <div className="absolute bottom-10 left-0 right-0 flex justify-center pointer-events-none px-4">
+            <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none px-4">
               <div className="bg-black/70 text-white text-xs px-3 py-1.5 rounded max-w-[80%] text-center leading-snug">
                 {currentSubtitle}
               </div>
             </div>
           )}
-          {displayEvents.length > 0 && (
-            <div className="flex items-center justify-end gap-2 px-3 py-1.5">
+        </div>{/* end containerRef */}
+
+        {/* Controls bar */}
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-[#0d1117] flex-shrink-0 border-t border-[#30363d]">
+            {/* Play/Pause */}
+            <button
+              onClick={togglePlay}
+              className="text-[#e6edf3] hover:text-white transition-colors flex-shrink-0"
+              title={paused ? "Play" : "Pause"}
+            >
+              {paused ? (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M3 2.5l10 5.5-10 5.5V2.5z"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="3" y="2" width="4" height="12" rx="1"/>
+                  <rect x="9" y="2" width="4" height="12" rx="1"/>
+                </svg>
+              )}
+            </button>
+
+            {/* Time */}
+            <span className="text-[10px] text-[#8b949e] font-mono w-28 flex-shrink-0 select-none">
+              {formatMs(currentMs)} / {formatMs(effectiveDuration)}
+            </span>
+
+            <div className="flex-1" />
+
+            {/* Mute */}
+            <button
+              onClick={toggleMute}
+              className="text-[#8b949e] hover:text-[#e6edf3] transition-colors flex-shrink-0"
+              title={muted ? "Unmute" : "Mute"}
+            >
+              {muted ? (
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 2L4 6H1v4h3l4 4V2z"/>
+                  <line x1="11" y1="5" x2="15" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <line x1="15" y1="5" x2="11" y2="9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M8 2L4 6H1v4h3l4 4V2z"/>
+                  <path d="M11 5.5a3 3 0 010 5M13.5 3.5a6 6 0 010 9" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+                </svg>
+              )}
+            </button>
+
+            {/* Fullscreen */}
+            <button
+              onClick={toggleFullscreen}
+              className="text-[#8b949e] hover:text-[#e6edf3] transition-colors flex-shrink-0"
+              title="Fullscreen"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                <path d="M1 5V1h4M15 5V1h-4M1 11v4h4M15 11v4h-4"/>
+              </svg>
+            </button>
+
+            {/* Events dialog button */}
+            {displayEvents.length > 0 && (
+              <button
+                onClick={() => setEventsDialogOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-[#30363d] bg-[#21262d] text-[#8b949e] text-xs hover:bg-[#30363d] hover:text-[#e6edf3] transition-colors"
+              >
+                Events
+              </button>
+            )}
+
+            {/* Analyze */}
+            {displayEvents.length > 0 && (
               <button
                 onClick={handleAnalyze}
                 disabled={analyzing || !cwd || !activeSessionId}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-[#30363d] bg-[#21262d] text-[#e6edf3] text-xs hover:bg-[#30363d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 {analyzing ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
-                    Analyzing…
-                  </>
+                  <><span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />Analyzing…</>
                 ) : (
-                  <>
-                    <span className="text-[#3fb950]">✦</span>
-                    Analyze with Claude
-                  </>
+                  <><span className="text-[#3fb950]">✦</span>Analyze with Claude</>
                 )}
               </button>
-            </div>
-          )}
-        </div>
+            )}
+        </div>{/* end controls */}
 
         {/* Timeline */}
         {effectiveDuration > 0 && (
-          <div className="px-4 py-2 border-t border-[#30363d] flex-shrink-0">
+          <div className="px-4 pt-2 pb-1 border-t border-[#30363d] flex-shrink-0 space-y-1">
+            {/* Events row */}
             <div
-              className="relative h-6 bg-[#161b22] rounded cursor-crosshair"
+              className="relative h-5 bg-[#161b22] rounded cursor-crosshair overflow-hidden"
               onClick={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
-                const ratio = (e.clientX - rect.left) / rect.width;
-                seekTo(ratio * effectiveDuration);
+                seekTo(((e.clientX - rect.left) / rect.width) * effectiveDuration);
               }}
             >
-              {/* Playhead */}
               <div
                 className="absolute top-0 bottom-0 w-px bg-[#388bfd]"
                 style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
               />
-              {/* Event markers */}
               {displayEvents.map((ev) => (
                 <div
                   key={ev.id}
@@ -414,68 +465,99 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                   title={`${formatMs(ev.ts_ms)} ${ev.type}`}
                 />
               ))}
-              {/* Time labels */}
-              <div className="absolute left-0 bottom-0 text-[9px] text-[#6e7681] translate-y-full pt-0.5">0s</div>
-              <div className="absolute right-0 bottom-0 text-[9px] text-[#6e7681] translate-y-full pt-0.5">
-                {formatMs(effectiveDuration)}
-              </div>
+            </div>
+
+            {/* Analysis result row */}
+            {frames.length > 0 && (() => {
+              const stepByFrame = new Map<string, string>();
+              if (resultContent) {
+                for (const line of resultContent.split("\n")) {
+                  const match = line.match(/^\d+\. (.*)$/);
+                  if (!match) continue;
+                  const body = match[1]!;
+                  const fm = body.match(/^((?:`frame-[^`]+\.jpg`(?:,\s*)?)+)\s*[—-]\s*(.*)$/);
+                  if (fm) {
+                    for (const [, name] of [...fm[1]!.matchAll(/`(frame-[^`]+\.jpg)`/g)]) {
+                      stepByFrame.set(name!, fm[2]!);
+                    }
+                  }
+                }
+              }
+              return (
+                <div
+                  className="relative h-5 bg-[#161b22] rounded cursor-crosshair overflow-hidden"
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    seekTo(((e.clientX - rect.left) / rect.width) * effectiveDuration);
+                  }}
+                >
+                  <div
+                    className="absolute top-0 bottom-0 w-px bg-[#388bfd]"
+                    style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
+                  />
+                  {frames.map((f) => {
+                    const name = f.path.split("/").pop() ?? "";
+                    const label = stepByFrame.get(name);
+                    const isActive = frames.findLast((fr) => fr.ts_ms <= currentMs)?.ts_ms === f.ts_ms;
+                    return (
+                      <div
+                        key={f.ts_ms}
+                        className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
+                        style={{
+                          left: `${(f.ts_ms / effectiveDuration) * 100}%`,
+                          backgroundColor: isActive ? "#e3b341" : "#6e7681",
+                        }}
+                        onClick={(e) => { e.stopPropagation(); seekTo(f.ts_ms); }}
+                        title={label ? `${formatMs(f.ts_ms)} — ${label}` : formatMs(f.ts_ms)}
+                      />
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            <div className="flex justify-between">
+              <span className="text-[9px] text-[#6e7681]">0s</span>
+              <span className="text-[9px] text-[#6e7681]">{formatMs(effectiveDuration)}</span>
             </div>
           </div>
         )}
 
-        {/* Hidden canvas for frame extraction */}
         <canvas ref={canvasRef} className="hidden" />
-
-        {/* Event list */}
-        <div
-          ref={listRef}
-          className="flex-1 overflow-y-auto px-4 py-2 min-h-0"
-        >
-          {displayEvents.length === 0 && (
-            <div className="text-xs text-[#6e7681] text-center py-4">
-              {dbPath ? "No actions captured" : "No action data for this recording"}
-            </div>
-          )}
-          {displayEvents.map((ev, i) => (
-            <button
-              key={ev.id}
-              onClick={() => seekTo(ev.ts_ms)}
-              className={`w-full flex items-center gap-3 px-2 py-1 rounded text-left hover:bg-[#161b22] transition-colors ${
-                ev.ts_ms <= currentMs && (displayEvents[i + 1]?.ts_ms ?? Infinity) > currentMs
-                  ? "bg-[#161b22]"
-                  : ""
-              }`}
-            >
-              <span className="text-[10px] text-[#8b949e] font-mono w-16 flex-shrink-0">
-                {formatMs(ev.ts_ms)}
-              </span>
-              <span
-                className="text-[10px] w-14 flex-shrink-0 font-mono"
-                style={{ color: TYPE_COLOR[ev.type] ?? "#8b949e" }}
-              >
-                {formatType(ev.type)}
-              </span>
-              <span className="text-[10px] text-[#6e7681] truncate">
-                {useChrome ? describeChromeEvent(ev as ChromeEvent) : getRichLabel(ev as ActionEvent, chromeEvents)}
-              </span>
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Right: Analysis panel */}
-      {panelOpen && resultContent && (
-        <AnalysisPanel
-          resultContent={resultContent}
-          frames={frames}
-          events={events}
-          currentMs={currentMs}
-          width={panelWidth}
-          onClose={() => setPanelOpen(false)}
-          onWidthChange={setPanelWidth}
-          onSeek={seekTo}
-        />
+      {/* Events dialog */}
+      {eventsDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setEventsDialogOpen(false)}>
+          <div
+            className="bg-[#161b22] border border-[#30363d] rounded-lg w-[560px] max-h-[70vh] flex flex-col shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-[#30363d] flex-shrink-0">
+              <span className="text-xs font-semibold text-[#e6edf3]">Events ({displayEvents.length})</span>
+              <button onClick={() => setEventsDialogOpen(false)} className="text-[#6e7681] hover:text-white text-sm leading-none">×</button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-3 py-2">
+              {displayEvents.map((ev, i) => (
+                <button
+                  key={ev.id}
+                  onClick={() => { seekTo(ev.ts_ms); setEventsDialogOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-2 py-1 rounded text-left hover:bg-[#21262d] transition-colors ${
+                    ev.ts_ms <= currentMs && (displayEvents[i + 1]?.ts_ms ?? Infinity) > currentMs ? "bg-[#21262d]" : ""
+                  }`}
+                >
+                  <span className="text-[10px] text-[#8b949e] font-mono w-16 flex-shrink-0">{formatMs(ev.ts_ms)}</span>
+                  <span className="text-[10px] w-14 flex-shrink-0 font-mono" style={{ color: TYPE_COLOR[ev.type] ?? "#8b949e" }}>{formatType(ev.type)}</span>
+                  <span className="text-[10px] text-[#6e7681] truncate">
+                    {useChrome ? describeChromeEvent(ev as ChromeEvent) : getRichLabel(ev as ActionEvent, chromeEvents)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
+
     </div>
   );
 }
