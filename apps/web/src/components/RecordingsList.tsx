@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { ScrollArea } from "~/components/ui/scroll-area";
+import { Badge } from "~/components/ui/badge";
+import { cn } from "~/lib/utils";
 
 interface Props {
   cwd: string | null;
@@ -27,35 +30,37 @@ export function RecordingsList({ cwd, refreshKey, selectedPath, onSelect }: Prop
   if (recordings.length === 0) return null;
 
   return (
-    <>
-      <div className="mt-3 font-sans flex flex-col min-h-0">
-        <div className="text-[10px] text-[#6e7681] uppercase tracking-widest mb-2">
-          Recordings ({recordings.length})
-        </div>
-
-        <div className="flex flex-col gap-1 overflow-y-auto">
+    <div className="mt-3 flex flex-col min-h-0 font-sans">
+      <div className="flex items-center gap-1.5 mb-2">
+        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
+          Recordings
+        </span>
+        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">
+          {recordings.length}
+        </Badge>
+      </div>
+      <ScrollArea className="flex-1">
+        <div className="flex flex-col gap-1 pr-1">
           {recordings.map((r) => (
-            <div
+            <button
               key={r.path}
-              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors flex-shrink-0 ${
+              onClick={() => onSelect(selectedPath === r.path ? null : r)}
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-colors text-xs",
                 selectedPath === r.path
-                  ? "border-[#388bfd] bg-[#0d1117] text-[#e6edf3]"
-                  : "border-[#30363d] bg-[#161b22] text-[#8b949e] hover:border-[#6e7681] hover:text-[#c9d1d9]"
-              }`}
+                  ? "border-primary bg-background text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:border-border/70 hover:text-card-foreground"
+              )}
             >
-              <button
-                className="flex items-center gap-2 flex-1 min-w-0 text-left"
-                onClick={() => onSelect(selectedPath === r.path ? null : r)}
-              >
-                <span className="text-sm">🎬</span>
-                <span className="flex-1 text-xs font-mono truncate">{formatName(r.name)}</span>
-                <span className="text-[10px] text-[#6e7681] flex-shrink-0">{formatSize(r.size)}</span>
-              </button>
-            </div>
+              <span className="text-sm">🎬</span>
+              <span className="flex-1 font-mono truncate">{formatName(r.name)}</span>
+              <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                {formatSize(r.size)}
+              </span>
+            </button>
           ))}
         </div>
-      </div>
-
-    </>
+      </ScrollArea>
+    </div>
   );
 }
