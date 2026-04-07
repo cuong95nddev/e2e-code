@@ -87,24 +87,25 @@ function openDb(dbPath: string): SessionState {
 export function startCapture(dbPath: string): { captureActive: boolean } {
   if (session) {
     uIOhook.stop();
-    uIOhook.removeAllListeners();
+    uIOhook.off("mousedown", handlers.mousedown);
+    uIOhook.off("mouseup",   handlers.mouseup);
+    uIOhook.off("keydown",   handlers.keydown);
+    uIOhook.off("keyup",     handlers.keyup);
+    uIOhook.off("wheel",     handlers.wheel);
     session.db.close();
     session = null;
   }
-
-  FS.mkdirSync(Path.dirname(dbPath), { recursive: true });
-  session = openDb(dbPath);
 
   // macOS: check Accessibility permission (prompt=true shows system dialog)
   if (process.platform === "darwin") {
     const trusted = systemPreferences.isTrustedAccessibilityClient(true);
     if (!trusted) {
-      // User needs to grant access and restart; recording continues without capture
-      session.db.close();
-      session = null;
       return { captureActive: false };
     }
   }
+
+  FS.mkdirSync(Path.dirname(dbPath), { recursive: true });
+  session = openDb(dbPath);
 
   uIOhook.on("mousedown", handlers.mousedown);
   uIOhook.on("mouseup",   handlers.mouseup);
@@ -118,7 +119,11 @@ export function startCapture(dbPath: string): { captureActive: boolean } {
 export function stopCapture(): void {
   if (!session) return;
   uIOhook.stop();
-  uIOhook.removeAllListeners();
+  uIOhook.off("mousedown", handlers.mousedown);
+  uIOhook.off("mouseup",   handlers.mouseup);
+  uIOhook.off("keydown",   handlers.keydown);
+  uIOhook.off("keyup",     handlers.keyup);
+  uIOhook.off("wheel",     handlers.wheel);
   session.db.close();
   session = null;
 }
