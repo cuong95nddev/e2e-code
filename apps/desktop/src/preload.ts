@@ -44,7 +44,7 @@ export interface ElectronAPI {
     showTray(): void;
     hideTray(): void;
     onStopFromTray(callback: () => void): () => void;
-    sessionStart(cwd: string): Promise<{ dbPath: string; stem: string; startTime: number }>;
+    sessionStart(cwd: string): Promise<{ dbPath: string | null; stem: string; startTime: number; captureActive: boolean }>;
     sessionStop(): Promise<void>;
     queryActions(dbPath: string, fromMs: number, toMs: number): Promise<ActionEvent[]>;
   };

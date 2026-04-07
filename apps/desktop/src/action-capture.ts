@@ -59,7 +59,7 @@ const handlers = {
   wheel:     (e: UiohookWheelEvent) => ins({ type: "wheel", x: e.x, y: e.y, delta_y: e.rotation }),
 };
 
-function openDb(dbPath: string): SessionState {
+function openDb(dbPath: string, startTime: number): SessionState {
   const db = new Database(dbPath);
   db.exec(`
     CREATE TABLE IF NOT EXISTS events (
@@ -81,10 +81,10 @@ function openDb(dbPath: string): SessionState {
     INSERT INTO events (type, ts_ms, x, y, button, keycode, key_char, modifiers, delta_x, delta_y)
     VALUES (@type, @ts_ms, @x, @y, @button, @keycode, @key_char, @modifiers, @delta_x, @delta_y)
   `);
-  return { db, insert, startTime: Date.now() };
+  return { db, insert, startTime };
 }
 
-export function startCapture(dbPath: string): { captureActive: boolean } {
+export function startCapture(dbPath: string, startTime: number = Date.now()): { captureActive: boolean } {
   if (session) {
     uIOhook.stop();
     uIOhook.off("mousedown", handlers.mousedown);
@@ -105,7 +105,7 @@ export function startCapture(dbPath: string): { captureActive: boolean } {
   }
 
   FS.mkdirSync(Path.dirname(dbPath), { recursive: true });
-  session = openDb(dbPath);
+  session = openDb(dbPath, startTime);
 
   uIOhook.on("mousedown", handlers.mousedown);
   uIOhook.on("mouseup",   handlers.mouseup);
@@ -129,10 +129,6 @@ export function stopCapture(): void {
 }
 
 export function registerActionCaptureHandlers(): void {
-  ipcMain.handle("actions:start", (_event, dbPath: string) => startCapture(dbPath));
-
-  ipcMain.handle("actions:stop", () => stopCapture());
-
   ipcMain.handle("actions:query", async (_event, dbPath: string, fromMs: number, toMs: number) => {
     if (!dbPath || !Path.isAbsolute(dbPath)) return [];
     try {

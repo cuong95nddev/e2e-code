@@ -148,8 +148,8 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
     const stem = ts;
     const dbPath = Path.join(dir, `${stem}.db`);
     const startTime = Date.now();
-    startCapture(dbPath);
-    return { dbPath, stem, startTime };
+    const { captureActive } = startCapture(dbPath, startTime);
+    return { dbPath: captureActive ? dbPath : null, stem, startTime, captureActive };
   });
 
   // --- sessionStop ---
