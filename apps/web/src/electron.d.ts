@@ -76,6 +76,7 @@ interface ElectronAPI {
   app: {
     pickFolder(): Promise<string | null>;
     openExternal(url: string): Promise<void>;
+    getVideoServerPort(): Promise<number>;
   };
   recorder: {
     getSources(): Promise<RecorderSource[]>;

@@ -144,6 +144,12 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  const [videoServerPort, setVideoServerPort] = useState(0);
+
+  useEffect(() => {
+    window.electronAPI.app.getVideoServerPort().then(setVideoServerPort);
+  }, []);
+
   const [paused, setPaused] = useState(true);
   const [muted, setMuted] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -254,9 +260,9 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
   })();
 
   const handleAnalyze = useCallback(async () => {
-    if (!cwd || !activeSessionId || !canvasRef.current) return;
+    if (!cwd || !activeSessionId || !canvasRef.current || !videoServerPort) return;
     setAnalyzing(true);
-    const src = `recording://${videoPath}`;
+    const src = `http://127.0.0.1:${videoServerPort}${videoPath}`;
     try {
       const framesDirPath = `${cwd}/recordings/${stem}/frames`;
       type FrameRow = { relPath: string; time: string };
@@ -348,7 +354,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
         <div ref={containerRef} className="bg-black flex-1 min-h-0 relative">
           <video
             ref={videoRef}
-            src={`recording://${videoPath}`}
+            src={videoServerPort > 0 ? `http://127.0.0.1:${videoServerPort}${videoPath}` : undefined}
             className="w-full h-full object-contain block"
             onLoadedMetadata={handleMetadata}
             onTimeUpdate={handleTimeUpdate}

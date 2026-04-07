@@ -1,17 +1,13 @@
 import * as FS from "node:fs";
+import * as Http from "node:http";
 import * as OS from "node:os";
 import * as Path from "node:path";
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, net, protocol, shell } from "electron";
-import { pathToFileURL } from "node:url";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
 import { RotatingFileSink } from "./logging";
 import { spawnPty, writePty, resizePty, killPty, killAllPtys } from "./pty-manager";
 import { registerRecorderHandlers } from "./recorder-manager";
 import { registerActionCaptureHandlers } from "./action-capture";
 import { startChromeBridge, stopChromeBridge, setActiveCwd } from "./chrome-bridge";
-
-protocol.registerSchemesAsPrivileged([
-  { scheme: "recording", privileges: { secure: true, supportFetchAPI: true, stream: true } },
-]);
 
 const BASE_DIR = Path.join(OS.homedir(), ".e2e-code");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
@@ -20,6 +16,45 @@ const DESKTOP_SCHEME = "e2e-code";
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 
 let mainWindow: BrowserWindow | null = null;
+let videoServerPort = 0;
+
+// Local HTTP server for serving recording files with proper Range support.
+// Custom Electron protocols (protocol.handle) have unfixable stream lifecycle bugs
+// that cause video seeking to break after the first seek.
+const videoServer = Http.createServer((req, res) => {
+  const filePath = decodeURIComponent((req.url ?? "").replace(/\?.*$/, ""));
+  let stat: FS.Stats;
+  try { stat = FS.statSync(filePath); }
+  catch { res.writeHead(404); res.end(); return; }
+
+  const total = stat.size;
+  const mime = filePath.endsWith(".webm") ? "video/webm" : "video/mp4";
+  const range = req.headers.range;
+
+  if (range) {
+    const m = range.match(/bytes=(\d+)-(\d*)/);
+    if (!m) { res.writeHead(416); res.end(); return; }
+    const start = parseInt(m[1]!, 10);
+    const end = m[2] ? parseInt(m[2]!, 10) : total - 1;
+    res.writeHead(206, {
+      "Content-Type": mime,
+      "Content-Range": `bytes ${start}-${end}/${total}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": String(end - start + 1),
+    });
+    FS.createReadStream(filePath, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, {
+      "Content-Type": mime,
+      "Accept-Ranges": "bytes",
+      "Content-Length": String(total),
+    });
+    FS.createReadStream(filePath).pipe(res);
+  }
+});
+videoServer.listen(0, "127.0.0.1", () => {
+  videoServerPort = (videoServer.address() as { port: number }).port;
+});
 
 FS.mkdirSync(LOG_DIR, { recursive: true });
 const desktopLog = new RotatingFileSink({ dir: LOG_DIR, prefix: "desktop" });
@@ -80,6 +115,8 @@ function registerIpcHandlers(): void {
   ipcMain.handle("app:openExternal", async (_event, url: string) => {
     await shell.openExternal(url);
   });
+
+  ipcMain.handle("app:getVideoServerPort", () => videoServerPort);
 }
 
 function createWindow(): void {
@@ -115,14 +152,6 @@ function createWindow(): void {
 app.whenReady().then(() => {
   log("App ready, registering IPC handlers");
 
-  // Serve local recording files via recording:///absolute/path
-  protocol.handle("recording", (request) => {
-    const filePath = decodeURIComponent(new URL(request.url).pathname);
-    return net.fetch(pathToFileURL(filePath).toString(), {
-      headers: request.headers,
-    });
-  });
-
   registerIpcHandlers();
   registerRecorderHandlers(() => mainWindow);
   registerActionCaptureHandlers();
@@ -148,4 +177,5 @@ app.on("will-quit", () => {
 app.on("before-quit", () => {
   killAllPtys();
   stopChromeBridge();
+  videoServer.close();
 });

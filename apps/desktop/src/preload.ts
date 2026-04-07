@@ -65,6 +65,7 @@ export interface ElectronAPI {
   app: {
     pickFolder(): Promise<string | null>;
     openExternal(url: string): Promise<void>;
+    getVideoServerPort(): Promise<number>;
   };
   recorder: {
     getSources(): Promise<{ id: string; name: string; thumbnail: string /* base64 data URL */ }[]>;
@@ -119,6 +120,7 @@ const api: ElectronAPI = {
   app: {
     pickFolder: () => ipcRenderer.invoke("app:pickFolder"),
     openExternal: (url: string) => ipcRenderer.invoke("app:openExternal", url),
+    getVideoServerPort: () => ipcRenderer.invoke("app:getVideoServerPort"),
   },
   recorder: {
     getSources: () => ipcRenderer.invoke("recorder:getSources"),
