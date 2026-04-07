@@ -1,10 +1,16 @@
 import * as FS from "node:fs";
 import * as OS from "node:os";
 import * as Path from "node:path";
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, net, protocol, shell } from "electron";
+import { pathToFileURL } from "node:url";
 import { RotatingFileSink } from "./logging";
 import { spawnPty, writePty, resizePty, killPty, killAllPtys } from "./pty-manager";
 import { registerRecorderHandlers } from "./recorder-manager";
+import { registerActionCaptureHandlers } from "./action-capture";
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: "recording", privileges: { secure: true, supportFetchAPI: true, stream: true } },
+]);
 
 const BASE_DIR = Path.join(OS.homedir(), ".e2e-code");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
@@ -107,8 +113,16 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   log("App ready, registering IPC handlers");
+
+  // Serve local recording files via recording:///absolute/path
+  protocol.handle("recording", (request) => {
+    const filePath = decodeURIComponent(new URL(request.url).pathname);
+    return net.fetch(pathToFileURL(filePath).toString());
+  });
+
   registerIpcHandlers();
   registerRecorderHandlers(() => mainWindow);
+  registerActionCaptureHandlers();
   createWindow();
 });
 

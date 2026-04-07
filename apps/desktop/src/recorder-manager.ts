@@ -1,6 +1,8 @@
 import * as FS from "node:fs";
 import * as Path from "node:path";
-import { ipcMain, desktopCapturer, globalShortcut, BrowserWindow, screen } from "electron";
+import * as zlib from "node:zlib";
+import { ipcMain, desktopCapturer, globalShortcut, BrowserWindow, screen, Tray, nativeImage, Menu } from "electron";
+import { startCapture, stopCapture } from "./action-capture";
 
 const OVERLAY_HTML = `<!DOCTYPE html>
 <html>
@@ -43,6 +45,58 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')window.overl
 </body>
 </html>`;
 
+let recordingTray: Tray | null = null;
+
+function makePNG(width: number, height: number, pixels: Buffer): Buffer {
+  const scanlines = Buffer.allocUnsafe(height * (1 + width * 4));
+  for (let y = 0; y < height; y++) {
+    scanlines[y * (1 + width * 4)] = 0;
+    pixels.copy(scanlines, y * (1 + width * 4) + 1, y * width * 4, (y + 1) * width * 4);
+  }
+  const compressed = zlib.deflateSync(scanlines);
+
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const len = Buffer.allocUnsafe(4);
+    len.writeUInt32BE(data.length);
+    const typeBuf = Buffer.from(type, "ascii");
+    const crcBuf = Buffer.allocUnsafe(4);
+    crcBuf.writeUInt32BE(zlib.crc32(Buffer.concat([typeBuf, data])));
+    return Buffer.concat([len, typeBuf, data, crcBuf]);
+  };
+
+  const ihdr = Buffer.allocUnsafe(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", compressed),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+function createRecordingIcon(size = 16): Electron.NativeImage {
+  const pixels = Buffer.allocUnsafe(size * size * 4);
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size / 2 - 1.5;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const inside = Math.hypot(x - cx + 0.5, y - cy + 0.5) <= r;
+      pixels[i]     = inside ? 220 : 0;
+      pixels[i + 1] = inside ? 38  : 0;
+      pixels[i + 2] = inside ? 38  : 0;
+      pixels[i + 3] = inside ? 255 : 0;
+    }
+  }
+  const img = nativeImage.createFromBuffer(makePNG(size, size, pixels));
+  img.setTemplateImage(false);
+  return img;
+}
+
 export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | null): void {
   // --- getSources ---
   ipcMain.handle("recorder:getSources", async () => {
@@ -57,15 +111,61 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
     }));
   });
 
+  // --- listFiles ---
+  ipcMain.handle("recorder:listFiles", async (_event, cwd: string) => {
+    if (!cwd || !Path.isAbsolute(cwd)) return [];
+    const dir = Path.join(cwd, "recordings");
+    try {
+      const entries = await FS.promises.readdir(dir);
+      const files = entries.filter((f) => f.endsWith(".webm")).sort().reverse();
+      const results = await Promise.all(
+        files.map(async (name) => {
+          const filePath = Path.join(dir, name);
+          const stat = await FS.promises.stat(filePath);
+          const dbFile = Path.join(dir, name.replace(".webm", ".db"));
+          const dbExists = await FS.promises.access(dbFile).then(() => true).catch(() => false);
+          return {
+            name,
+            path: filePath,
+            size: stat.size,
+            createdAt: stat.birthtime.toISOString(),
+            dbPath: dbExists ? dbFile : undefined,
+          };
+        }),
+      );
+      return results;
+    } catch {
+      return [];
+    }
+  });
+
+  // --- sessionStart ---
+  ipcMain.handle("recorder:sessionStart", async (_event, cwd: string) => {
+    if (!cwd || !Path.isAbsolute(cwd)) throw new Error(`Invalid cwd: ${cwd}`);
+    const dir = Path.join(cwd, "recordings");
+    await FS.promises.mkdir(dir, { recursive: true });
+    const ts = new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-");
+    const stem = ts;
+    const dbPath = Path.join(dir, `${stem}.db`);
+    const startTime = Date.now();
+    startCapture(dbPath);
+    return { dbPath, stem, startTime };
+  });
+
+  // --- sessionStop ---
+  ipcMain.handle("recorder:sessionStop", async () => {
+    stopCapture();
+  });
+
   // --- saveFile ---
-  ipcMain.handle("recorder:saveFile", async (_event, cwd: string, buffer: ArrayBuffer) => {
+  ipcMain.handle("recorder:saveFile", async (_event, cwd: string, buffer: ArrayBuffer, stem?: string) => {
     if (!cwd || !Path.isAbsolute(cwd)) throw new Error(`Invalid cwd: ${cwd}`);
     const MAX_SIZE = 200 * 1024 * 1024; // 200 MB
     if (buffer.byteLength > MAX_SIZE) throw new Error(`Recording too large: ${buffer.byteLength} bytes (max 200 MB)`);
     const dir = Path.join(cwd, "recordings");
     await FS.promises.mkdir(dir, { recursive: true });
-    const ts = new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-");
-    const filePath = Path.join(dir, `${ts}.webm`);
+    const useStem = stem ?? new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-");
+    const filePath = Path.join(dir, `${useStem}.webm`);
     await FS.promises.writeFile(filePath, Buffer.from(buffer));
     return filePath;
   });
@@ -117,6 +217,29 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
       ipcMain.on("overlay:cancel", cancelHandler);
       overlayWin.on("closed", () => settle(null));
     });
+  });
+
+  // --- tray: show while recording ---
+  ipcMain.on("recorder:showTray", () => {
+    if (recordingTray) return;
+    const icon = createRecordingIcon(16);
+    recordingTray = new Tray(icon);
+    recordingTray.setToolTip("Recording in progress — click to stop");
+    const menu = Menu.buildFromTemplate([
+      { label: "Stop Recording", click: () => {
+        const win = getMainWindow();
+        if (win && !win.isDestroyed()) win.webContents.send("recorder:stopFromTray");
+      }},
+    ]);
+    recordingTray.setContextMenu(menu);
+    recordingTray.on("click", () => {
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) win.webContents.send("recorder:stopFromTray");
+    });
+  });
+
+  ipcMain.on("recorder:hideTray", () => {
+    if (recordingTray) { recordingTray.destroy(); recordingTray = null; }
   });
 
   // --- global shortcut ⌘⇧5 ---
