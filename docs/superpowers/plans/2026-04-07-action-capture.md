@@ -49,7 +49,7 @@ Edit `apps/desktop/package.json`:
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^12.8.0",
     "electron": "41.1.1",
     "node-pty": "^1.1.0",
     "uiohook-napi": "^1.5.3"
