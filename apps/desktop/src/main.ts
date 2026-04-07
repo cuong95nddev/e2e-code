@@ -1,9 +1,10 @@
 import * as FS from "node:fs";
 import * as OS from "node:os";
 import * as Path from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, protocol, shell } from "electron";
 import { RotatingFileSink } from "./logging";
 import { spawnPty, writePty, resizePty, killPty, killAllPtys } from "./pty-manager";
+import { registerRecorderHandlers } from "./recorder-manager";
 
 const BASE_DIR = Path.join(OS.homedir(), ".e2e-code");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
@@ -107,12 +108,17 @@ function createWindow(): void {
 app.whenReady().then(() => {
   log("App ready, registering IPC handlers");
   registerIpcHandlers();
+  registerRecorderHandlers(() => mainWindow);
   createWindow();
 });
 
 app.on("window-all-closed", () => {
   killAllPtys();
   app.quit();
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("before-quit", () => {
