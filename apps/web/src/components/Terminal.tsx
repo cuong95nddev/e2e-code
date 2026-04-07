@@ -115,7 +115,7 @@ export function Terminal({ sessionId, visible }: TerminalProps) {
   return (
     <div
       ref={containerRef}
-      className="flex-1 min-h-0 bg-background"
+      className="h-full w-full bg-background"
       style={{ display: visible ? "block" : "none" }}
     />
   );
