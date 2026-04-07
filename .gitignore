@@ -5,3 +5,5 @@ dist-electron/
 *.tsbuildinfo
 .env
 .DS_Store
+.worktrees/
+.superpowers/
