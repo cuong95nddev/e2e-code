@@ -1,4 +1,7 @@
 import { useRef, useCallback, useEffect } from "react";
+import { Button } from "~/components/ui/button";
+import { ScrollArea } from "~/components/ui/scroll-area";
+import { cn } from "~/lib/utils";
 
 interface Props {
   resultContent: string;
@@ -20,8 +23,8 @@ function formatMs(ms: number): string {
 }
 
 interface ParsedStep {
-  frameNames: string[]; // e.g. ["frame-5007.jpg", "frame-5207.jpg"]
-  text: string;         // description after the frame prefix
+  frameNames: string[];
+  text: string;
 }
 
 function parseSteps(content: string): ParsedStep[] {
@@ -30,7 +33,6 @@ function parseSteps(content: string): ParsedStep[] {
     const match = line.match(/^\d+\. (.*)$/);
     if (!match) continue;
     const body = match[1]!;
-    // Extract leading backtick-quoted frame names: `frame-XXXX.jpg`, `frame-YYYY.jpg` — rest
     const frameMatch = body.match(/^((?:`frame-[^`]+\.jpg`(?:,\s*)?)+)\s*[—-]\s*(.*)$/);
     if (frameMatch) {
       const frameNames = [...frameMatch[1]!.matchAll(/`(frame-[^`]+\.jpg)`/g)].map((m) => m[1]!);
@@ -57,7 +59,6 @@ export function AnalysisPanel({
 
   const steps = parseSteps(resultContent);
 
-  // Build filename → step text lookup
   const stepByFrame = new Map<string, string>();
   for (const step of steps) {
     for (const name of step.frameNames) {
@@ -65,7 +66,6 @@ export function AnalysisPanel({
     }
   }
 
-  // Active step: last frame whose ts_ms <= currentMs
   const activeIdx = (() => {
     let idx = -1;
     for (let i = 0; i < frames.length; i++) {
@@ -74,7 +74,6 @@ export function AnalysisPanel({
     return idx;
   })();
 
-  // Auto-scroll active step into view
   useEffect(() => {
     if (!listRef.current || activeIdx < 0) return;
     const el = listRef.current.children[activeIdx] as HTMLElement | undefined;
@@ -109,84 +108,91 @@ export function AnalysisPanel({
 
   return (
     <div
-      className="flex flex-col h-full bg-[#0d1117] border-l border-[#30363d] relative flex-shrink-0"
+      className="flex flex-col h-full bg-background border-l border-border relative flex-shrink-0"
       style={{ width }}
     >
       {/* Resize handle */}
       <div
-        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-[#388bfd] transition-colors z-10"
+        className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/40 transition-colors z-10"
         onMouseDown={handleResizeMouseDown}
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[#30363d] flex-shrink-0">
-        <span className="text-xs font-semibold text-[#e6edf3]">Analysis</span>
-        <button
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0">
+        <span className="text-xs font-semibold text-foreground">Analysis</span>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onClose}
-          className="text-[#6e7681] hover:text-[#e6edf3] transition-colors text-sm leading-none"
+          className="h-auto w-auto p-0.5 text-muted-foreground hover:text-foreground"
         >
           ×
-        </button>
+        </Button>
       </div>
 
-      {/* Unified step list */}
-      <div ref={listRef} className="flex-1 overflow-y-auto min-h-0 p-2 space-y-2">
-        {frames.length === 0 && (
-          <div className="flex items-center justify-center h-32 text-xs text-[#6e7681]">
-            No frames extracted yet
-          </div>
-        )}
-        {frames.map((frame, i) => {
-          const isActive = i === activeIdx;
-          const frameName = frame.path.split("/").pop() ?? "";
-          const stepText = stepByFrame.get(frameName);
-          return (
-            <button
-              key={frame.ts_ms}
-              onClick={() => onSeek(frame.ts_ms)}
-              className={`w-full text-left rounded-md border overflow-hidden transition-colors group ${
-                isActive
-                  ? "border-[#388bfd] bg-[#0d2137]"
-                  : "border-[#30363d] hover:border-[#388bfd]"
-              }`}
-            >
-              <img
-                src={`recording://${frame.path}`}
-                alt={`Frame at ${formatMs(frame.ts_ms)}`}
-                className="w-full object-contain bg-black"
-                loading="lazy"
-              />
-              <div className="px-2 py-1.5 bg-[#161b22] flex items-start gap-2">
-                <span
-                  className={`text-[10px] font-mono flex-shrink-0 mt-0.5 ${
-                    isActive ? "text-[#388bfd]" : "text-[#6e7681]"
-                  }`}
-                >
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <span className="flex-1 min-w-0">
-                  {stepText ? (
-                    <span
-                      className={`text-[11px] leading-snug ${
-                        isActive ? "text-[#e6edf3]" : "text-[#c9d1d9]"
-                      }`}
-                    >
-                      {stepText.trim()}
-                    </span>
-                  ) : (
-                    <span className="text-[10px] text-[#6e7681] font-mono">
-                      {formatMs(frame.ts_ms)}
-                    </span>
-                  )}
-                </span>
-                {isActive && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#388bfd] flex-shrink-0 mt-1 animate-pulse" />
+      {/* Step list */}
+      <ScrollArea className="flex-1 min-h-0">
+        <div ref={listRef} className="p-2 space-y-2">
+          {frames.length === 0 && (
+            <div className="flex items-center justify-center h-32 text-xs text-muted-foreground">
+              No frames extracted yet
+            </div>
+          )}
+          {frames.map((frame, i) => {
+            const isActive = i === activeIdx;
+            const frameName = frame.path.split("/").pop() ?? "";
+            const stepText = stepByFrame.get(frameName);
+            return (
+              <button
+                key={frame.ts_ms}
+                onClick={() => onSeek(frame.ts_ms)}
+                className={cn(
+                  "w-full text-left rounded-md border overflow-hidden transition-colors group",
+                  isActive
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-primary/50"
                 )}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+              >
+                <img
+                  src={`recording://${frame.path}`}
+                  alt={`Frame at ${formatMs(frame.ts_ms)}`}
+                  className="w-full object-contain bg-black"
+                  loading="lazy"
+                />
+                <div className="px-2 py-1.5 bg-card flex items-start gap-2">
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono flex-shrink-0 mt-0.5",
+                      isActive ? "text-primary" : "text-muted-foreground"
+                    )}
+                  >
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    {stepText ? (
+                      <span
+                        className={cn(
+                          "text-[11px] leading-snug",
+                          isActive ? "text-foreground" : "text-card-foreground"
+                        )}
+                      >
+                        {stepText.trim()}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {formatMs(frame.ts_ms)}
+                      </span>
+                    )}
+                  </span>
+                  {isActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0 mt-1 animate-pulse" />
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
