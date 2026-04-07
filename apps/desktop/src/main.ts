@@ -118,7 +118,9 @@ app.whenReady().then(() => {
   // Serve local recording files via recording:///absolute/path
   protocol.handle("recording", (request) => {
     const filePath = decodeURIComponent(new URL(request.url).pathname);
-    return net.fetch(pathToFileURL(filePath).toString());
+    return net.fetch(pathToFileURL(filePath).toString(), {
+      headers: request.headers,
+    });
   });
 
   registerIpcHandlers();

@@ -1,11 +1,14 @@
 export {};
 
+import { webmFixDuration } from "webm-fix-duration";
+
 const BRIDGE_URL = "http://localhost:7878";
 
 let stream: MediaStream | null = null;
 let recorder: MediaRecorder | null = null;
 let chunks: Blob[] = [];
 let sessionId: string | null = null;
+let recordingStart = 0;
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.name === "doRecord") {
@@ -34,6 +37,7 @@ async function startRecording(streamId: string, sid: string): Promise<void> {
     },
   });
 
+  recordingStart = Date.now();
   recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8" });
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
   recorder.start(1000);
@@ -48,9 +52,10 @@ async function stopRecording(): Promise<void> {
   });
   stream?.getTracks().forEach((t) => t.stop());
 
-  const videoBlob = new Blob(chunks, { type: "video/webm" });
+  const rawBlob = new Blob(chunks, { type: "video/webm" });
+  const videoBlob = await webmFixDuration(rawBlob, Date.now() - recordingStart);
   const sid = sessionId;
-  recorder = null; stream = null; chunks = []; sessionId = null;
+  recorder = null; stream = null; chunks = []; sessionId = null; recordingStart = 0;
 
   await fetch(`${BRIDGE_URL}/recording`, {
     method: "POST",

@@ -1,6 +1,26 @@
 export {};
 const BRIDGE_URL = "http://localhost:7878";
 
+// ---- Event buffer (survives content-script restarts / page refreshes) ----
+
+let eventBuffer: unknown[] = [];
+let currentSessionId: string | null = null;
+
+async function flushEventsToBridge(): Promise<void> {
+  if (!currentSessionId || eventBuffer.length === 0) return;
+  const events = eventBuffer;
+  eventBuffer = [];
+  await fetch(`${BRIDGE_URL}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId: currentSessionId, events }),
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => {
+    // Put events back on failure so they're not lost
+    eventBuffer = [...events, ...eventBuffer];
+  });
+}
+
 // ---- Message router ----
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -15,6 +35,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
+  }
+  // Content script forwards events here instead of calling bridge directly
+  if (msg.name === "recordEvents") {
+    const events = msg.events as unknown[];
+    if (Array.isArray(events) && events.length > 0) {
+      eventBuffer.push(...events);
+      flushEventsToBridge().catch(() => {});
+    }
+    sendResponse({ ok: true });
+    return;
   }
 });
 
@@ -40,6 +70,10 @@ async function handleStart(body: {
 
   // Hand off the stream ID so it can start MediaRecorder
   await chrome.tabs.sendMessage(recTab.id!, { name: "doRecord", streamId, sessionId });
+
+  // Set in-memory session for event buffering
+  currentSessionId = sessionId;
+  eventBuffer = [];
 
   // Persist state
   await chrome.storage.session.set({
@@ -84,6 +118,11 @@ async function handleStop(): Promise<{ ok: boolean }> {
     try { await chrome.tabs.sendMessage(recordingTabId as number, { name: "stopRecord" }); } catch { /* tab closed */ }
   }
 
+  // Flush any buffered events before stopping
+  await flushEventsToBridge();
+  currentSessionId = null;
+  eventBuffer = [];
+
   // Finalize session on bridge
   if (sessionId) {
     await fetch(`${BRIDGE_URL}/session/stop`, {
@@ -117,6 +156,22 @@ function waitForTabLoad(tabId: number): Promise<void> {
     });
   });
 }
+
+// Re-inject content script and resume event capture after target tab navigates/reloads
+chrome.tabs.onUpdated.addListener(async (tabId, info) => {
+  if (info.status !== "complete") return;
+  const s = await chrome.storage.session.get(["recording", "targetTabId", "sessionId", "startTime"]);
+  if (!s["recording"] || s["targetTabId"] !== tabId) return;
+  const { sessionId, startTime } = s as { sessionId: string; startTime: number };
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content-script.js"] });
+  } catch { /* already injected */ }
+  try {
+    await chrome.tabs.sendMessage(tabId, { name: "startEvents", sessionId, startTime });
+  } catch (e) {
+    console.warn("[bg] re-startEvents after reload failed:", e);
+  }
+});
 
 // If the recording tab is closed manually, reset state
 chrome.tabs.onRemoved.addListener(async (tabId) => {

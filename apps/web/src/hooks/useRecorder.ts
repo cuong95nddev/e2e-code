@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { webmFixDuration } from "webm-fix-duration";
 
 export type RecorderState = "idle" | "recording";
 export type RecorderMode = "screen" | "window" | "region";
@@ -25,6 +26,7 @@ export function useRecorder() {
   const cwdRef = useRef<string>("");
   const stemRef = useRef<string | undefined>(undefined);
   const dbPathRef = useRef<string | null>(null);
+  const recordingStartRef = useRef<number>(0);
 
   const startRecording = useCallback(async (opts: StartOptions) => {
     cwdRef.current = opts.cwd;
@@ -73,6 +75,7 @@ export function useRecorder() {
     }
 
     chunksRef.current = [];
+    recordingStartRef.current = Date.now();
     const recorder = new MediaRecorder(recordStream, { mimeType: "video/webm;codecs=vp8" });
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -102,7 +105,8 @@ export function useRecorder() {
         // Stop action capture before saving video
         await window.electronAPI.recorder.sessionStop();
 
-        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const rawBlob = new Blob(chunksRef.current, { type: "video/webm" });
+        const blob = await webmFixDuration(rawBlob, Date.now() - recordingStartRef.current);
         const buffer = await blob.arrayBuffer();
         window.electronAPI.recorder.hideTray();
         try {

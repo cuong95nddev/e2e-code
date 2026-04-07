@@ -1,6 +1,5 @@
 import type { ChromeEvent, ElementContext } from "./types";
 
-const BRIDGE_URL = "http://localhost:7878";
 
 // ---- Re-injection guard ----
 
@@ -34,8 +33,9 @@ if (isContextValid()) {
       }
       if (msg.name === "stopEvents") {
         active = false;
-        flushEvents(sessionId).then(() => sendResponse({ ok: true }));
-        return true; // async
+        flushEvents(sessionId);
+        sendResponse({ ok: true });
+        return;
       }
     });
   } catch { /* context invalidated during setup */ }
@@ -43,17 +43,32 @@ if (isContextValid()) {
 
 // ---- Flush ----
 
-async function flushEvents(sid: string | null): Promise<void> {
+function flushEvents(sid: string | null): void {
   if (!sid || recordedEvents.length === 0) return;
   const events = recordedEvents;
   recordedEvents = [];
-  await fetch(`${BRIDGE_URL}/events`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId: sid, events }),
-    signal: AbortSignal.timeout(10000),
-  }).catch(() => {});
+  // Send to background service worker — survives page refresh
+  try {
+    chrome.runtime.sendMessage({ name: "recordEvents", events }).catch(() => {});
+  } catch { /* context invalidated */ }
 }
+
+// Flush on page unload — use sendBeacon for reliable delivery before page dies
+window.addEventListener("beforeunload", () => {
+  if (!active || recordedEvents.length === 0 || !sessionId) return;
+  const events = recordedEvents;
+  recordedEvents = [];
+  // sendBeacon is fire-and-forget and guaranteed to complete even during unload
+  try {
+    navigator.sendBeacon(
+      "http://localhost:7878/events",
+      JSON.stringify({ sessionId, events }),
+    );
+  } catch {
+    // Fallback to async message if beacon fails (e.g., not supported)
+    flushEvents(sessionId);
+  }
+});
 
 // ---- Helpers ----
 

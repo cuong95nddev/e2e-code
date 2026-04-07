@@ -223,7 +223,6 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
       FS.writeFile(webmPath, buf, (err) => {
         if (err) { jsonResponse(res, 500, { error: String(err) }); return; }
         jsonResponse(res, 200, { ok: true, path: webmPath });
-        // Notify renderer to refresh list
         const win = getMainWindowFn?.();
         if (win && !win.isDestroyed()) {
           win.webContents.send("recorder:fileListChanged");

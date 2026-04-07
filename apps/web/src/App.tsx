@@ -33,8 +33,10 @@ export function App() {
   const leftDragStartWidth = useRef(0);
 
   const createSession = useCallback(async (cwd?: string) => {
-    const folder = cwd ?? (await window.electronAPI.app.pickFolder());
+    const lastFolder = localStorage.getItem("lastFolder") ?? undefined;
+    const folder = cwd ?? lastFolder ?? (await window.electronAPI.app.pickFolder());
     if (!folder) return;
+    localStorage.setItem("lastFolder", folder);
 
     const id = generateSessionId();
     const session: Session = {
