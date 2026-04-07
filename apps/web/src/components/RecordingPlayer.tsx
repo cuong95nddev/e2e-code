@@ -12,15 +12,15 @@ interface Props {
 }
 
 const TYPE_COLOR: Record<string, string> = {
-  mousedown: "hsl(var(--primary))",
-  mouseup:   "hsl(var(--primary))",
+  mousedown: "var(--primary)",
+  mouseup:   "var(--primary)",
   keydown:   "#22c55e",
   keyup:     "#16a34a",
-  wheel:     "hsl(var(--muted-foreground))",
-  click:     "hsl(var(--primary))",
+  wheel:     "var(--muted-foreground)",
+  click:     "var(--primary)",
   input:     "#22c55e",
   navigation: "#eab308",
-  scroll:    "hsl(var(--muted-foreground))",
+  scroll:    "var(--muted-foreground)",
 };
 
 function formatMs(ms: number): string {
@@ -467,7 +467,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                   className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
                   style={{
                     left: `${(ev.ts_ms / effectiveDuration) * 100}%`,
-                    backgroundColor: TYPE_COLOR[ev.type] ?? "hsl(var(--muted-foreground))",
+                    backgroundColor: TYPE_COLOR[ev.type] ?? "var(--muted-foreground)",
                   }}
                   onClick={(e) => { e.stopPropagation(); seekTo(ev.ts_ms); }}
                   title={`${formatMs(ev.ts_ms)} ${ev.type}`}
@@ -513,7 +513,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                         className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
                         style={{
                           left: `${(f.ts_ms / effectiveDuration) * 100}%`,
-                          backgroundColor: isActive ? "#eab308" : "hsl(var(--muted-foreground))",
+                          backgroundColor: isActive ? "#eab308" : "var(--muted-foreground)",
                         }}
                         onClick={(e) => { e.stopPropagation(); seekTo(f.ts_ms); }}
                         title={label ? `${formatMs(f.ts_ms)} — ${label}` : formatMs(f.ts_ms)}
@@ -560,7 +560,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                   </span>
                   <span
                     className="text-[10px] w-14 flex-shrink-0 font-mono"
-                    style={{ color: TYPE_COLOR[ev.type] ?? "hsl(var(--muted-foreground))" }}
+                    style={{ color: TYPE_COLOR[ev.type] ?? "var(--muted-foreground)" }}
                   >
                     {formatType(ev.type)}
                   </span>
