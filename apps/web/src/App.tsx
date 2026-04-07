@@ -75,6 +75,14 @@ export function App() {
     window.electronAPI.pty.create(id, session.cwd, null, false);
   }, [sessions]);
 
+  // Listen for file list changes (e.g. new recording saved by chrome extension)
+  useEffect(() => {
+    const off = window.electronAPI.recorder.onFileListChanged(() => {
+      setRecordingRefreshKey((k) => k + 1);
+    });
+    return off;
+  }, []);
+
   // Listen for PTY exit events
   useEffect(() => {
     const unsubExit = window.electronAPI.pty.onExit((sessionId, exitCode) => {

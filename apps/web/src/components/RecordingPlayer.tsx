@@ -86,9 +86,29 @@ async function extractFrame(
   });
 }
 
+function getRichLabel(ev: ActionEvent, chromeEvents: ChromeEvent[]): string {
+  // Find chrome event within ±100ms
+  const ce = chromeEvents.find((c) => Math.abs(c.ts_ms - ev.ts_ms) <= 100);
+  if (!ce) return describeEvent(ev);
+
+  if (ce.type === "navigation") return `→ ${ce.nav_to ?? ce.url ?? ""}`;
+  if (ce.type === "keydown" && ce.key_combo) return ce.key_combo;
+  if (ce.type === "input" && ce.input_value != null) {
+    const label = ce.el_aria_label ?? ce.el_placeholder ?? ce.el_tag ?? "input";
+    return `"${ce.input_value}" → ${label}`;
+  }
+  if (ce.type === "click") {
+    const label = ce.el_text ?? ce.el_aria_label ?? ce.el_testid ?? ce.el_id ?? ce.el_tag ?? "element";
+    const selector = ce.el_testid ? `[data-testid="${ce.el_testid}"]` : (ce.el_id ? `#${ce.el_id}` : (ce.el_selector ?? ""));
+    return `${label}${selector ? `  ${selector}` : ""}`;
+  }
+  return describeEvent(ev);
+}
+
 export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [events, setEvents] = useState<ActionEvent[]>([]);
+  const [chromeEvents, setChromeEvents] = useState<ChromeEvent[]>([]);
   const [duration, setDuration] = useState(0);
   const [currentMs, setCurrentMs] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -101,6 +121,8 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
     if (!dbPath) return;
     const evts = await window.electronAPI.recorder.queryActions(dbPath, 0, d * 1000);
     setEvents(evts);
+    const cevts = await window.electronAPI.recorder.queryChrome(dbPath, 0, d * 1000);
+    setChromeEvents(cevts);
   }, [dbPath]);
 
   const handleTimeUpdate = useCallback(() => {
@@ -130,7 +152,25 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
         await window.electronAPI.recorder.saveFrame(framePath, buffer);
 
         const relFrame = `recordings/${stem}/frames/frame-${ev.ts_ms}.jpg`;
-        const detail = describeEvent(ev);
+        // Try to enrich with chrome event context
+        const ce = chromeEvents.find((c) => Math.abs(c.ts_ms - ev.ts_ms) <= 100);
+        let detail: string;
+        if (ce) {
+          if (ce.type === "navigation") {
+            detail = `navigation → ${ce.nav_to ?? ce.url ?? ""}`;
+          } else if (ce.type === "keydown" && ce.key_combo) {
+            detail = `key ${ce.key_combo}`;
+          } else if (ce.type === "input" && ce.input_value != null) {
+            const label = ce.el_aria_label ?? ce.el_placeholder ?? ce.el_tag ?? "input";
+            detail = `typed "${ce.input_value}" in ${label} [${ce.el_selector ?? ""}]`;
+          } else {
+            const label = ce.el_text ?? ce.el_aria_label ?? ce.el_testid ?? ce.el_id ?? ce.el_tag ?? "element";
+            const selector = ce.el_testid ? `[data-testid="${ce.el_testid}"]` : (ce.el_id ? `#${ce.el_id}` : (ce.el_selector ?? ""));
+            detail = `${label}${selector ? ` [${selector}]` : ""}`;
+          }
+        } else {
+          detail = describeEvent(ev);
+        }
         rows.push(`| ${i + 1} | ${formatMs(ev.ts_ms)} | ${ev.type} | ${detail} | ${relFrame} |`);
       }
 
@@ -157,7 +197,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
     } finally {
       setAnalyzing(false);
     }
-  }, [cwd, activeSessionId, events, stem]);
+  }, [cwd, activeSessionId, events, chromeEvents, stem]);
 
   useEffect(() => {
     if (!listRef.current || events.length === 0) return;
@@ -272,7 +312,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
               >
                 {formatType(ev.type)}
               </span>
-              <span className="text-[10px] text-[#6e7681] truncate">{describeEvent(ev)}</span>
+              <span className="text-[10px] text-[#6e7681] truncate">{getRichLabel(ev, chromeEvents)}</span>
             </button>
           ))}
         </div>
