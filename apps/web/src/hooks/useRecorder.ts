@@ -1,7 +1,6 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 export type RecorderState = "idle" | "recording";
-
 export type RecorderMode = "screen" | "window" | "region";
 
 interface StartOptions {
@@ -15,6 +14,7 @@ export function useRecorder() {
   const [recorderState, setRecorderState] = useState<RecorderState>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [savedPath, setSavedPath] = useState<string | null>(null);
+  const [savedDbPath, setSavedDbPath] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -23,9 +23,16 @@ export function useRecorder() {
   const videoElemRef = useRef<HTMLVideoElement | null>(null);
   const rawStreamRef = useRef<MediaStream | null>(null);
   const cwdRef = useRef<string>("");
+  const stemRef = useRef<string | undefined>(undefined);
+  const dbPathRef = useRef<string | null>(null);
 
   const startRecording = useCallback(async (opts: StartOptions) => {
     cwdRef.current = opts.cwd;
+
+    // Start action capture session first (get stem for filename pairing)
+    const session = await window.electronAPI.recorder.sessionStart(opts.cwd);
+    stemRef.current = session.stem;
+    dbPathRef.current = session.captureActive ? session.dbPath : null;
 
     const rawStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
@@ -75,8 +82,10 @@ export function useRecorder() {
 
     setElapsed(0);
     setSavedPath(null);
+    setSavedDbPath(null);
     setRecorderState("recording");
     timerRef.current = setInterval(() => setElapsed((n) => n + 1), 1000);
+    window.electronAPI.recorder.showTray();
   }, []);
 
   const stopRecording = useCallback(async (): Promise<string> => {
@@ -90,11 +99,20 @@ export function useRecorder() {
         if (videoElemRef.current) { videoElemRef.current.srcObject = null; videoElemRef.current = null; }
         if (rawStreamRef.current) { rawStreamRef.current.getTracks().forEach((t) => t.stop()); rawStreamRef.current = null; }
 
+        // Stop action capture before saving video
+        await window.electronAPI.recorder.sessionStop();
+
         const blob = new Blob(chunksRef.current, { type: "video/webm" });
         const buffer = await blob.arrayBuffer();
         try {
-          const path = await window.electronAPI.recorder.saveFile(cwdRef.current, buffer);
+          const path = await window.electronAPI.recorder.saveFile(
+            cwdRef.current,
+            buffer,
+            stemRef.current,
+          );
+          window.electronAPI.recorder.hideTray();
           setSavedPath(path);
+          setSavedDbPath(dbPathRef.current);
           setRecorderState("idle");
           resolve(path);
         } catch (err) {
@@ -106,5 +124,11 @@ export function useRecorder() {
     });
   }, [recorderState]);
 
-  return { recorderState, elapsed, savedPath, startRecording, stopRecording };
+  useEffect(() => {
+    return window.electronAPI.recorder.onStopFromTray(() => {
+      stopRecording();
+    });
+  }, [stopRecording]);
+
+  return { recorderState, elapsed, savedPath, savedDbPath, startRecording, stopRecording };
 }
