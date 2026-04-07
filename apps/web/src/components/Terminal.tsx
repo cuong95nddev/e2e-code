@@ -12,6 +12,7 @@ export function Terminal({ sessionId, visible }: TerminalProps) {
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const spawnedRef = useRef(false);
+  const prevVisibleRef = useRef(visible);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -102,8 +103,12 @@ export function Terminal({ sessionId, visible }: TerminalProps) {
           // ignore
         }
       });
-      xtermRef.current?.focus();
+      // Only steal focus when transitioning from hidden → visible
+      if (!prevVisibleRef.current) {
+        xtermRef.current?.focus();
+      }
     }
+    prevVisibleRef.current = visible;
   }, [visible, sessionId]);
 
   useEffect(() => {

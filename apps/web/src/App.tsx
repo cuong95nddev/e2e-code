@@ -228,6 +228,7 @@ export function App() {
                   dbPath={selectedRecording.dbPath}
                   cwd={activeSession?.cwd ?? null}
                   activeSessionId={activeSessionId}
+                  onShowTerminal={() => setTerminalVisible(true)}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full bg-black">
@@ -239,81 +240,79 @@ export function App() {
             </div>
           </div>
 
-          {/* Terminal panel */}
-          {terminalVisible && (
-            <>
+          {/* Terminal panel — kept mounted to preserve running PTY, hidden via CSS */}
+          <div className={cn(!terminalVisible && "hidden")}>
+            <div
+              className="h-1 bg-border hover:bg-primary/40 cursor-ns-resize transition-colors flex-shrink-0"
+              onMouseDown={handleDragStart}
+            />
+            <div className="flex items-center h-8 bg-card border-t border-border flex-shrink-0 px-2 gap-1">
+              <span className="text-xs text-muted-foreground uppercase tracking-widest font-sans px-1">
+                Terminal
+              </span>
               <div
-                className="h-1 bg-border hover:bg-primary/40 cursor-ns-resize transition-colors flex-shrink-0"
-                onMouseDown={handleDragStart}
-              />
-              <div className="flex items-center h-8 bg-card border-t border-border flex-shrink-0 px-2 gap-1">
-                <span className="text-xs text-muted-foreground uppercase tracking-widest font-sans px-1">
-                  Terminal
-                </span>
-                <div
-                  className="flex items-center gap-0.5 flex-1 overflow-x-auto"
-                  style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-                >
-                  {sessions.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => setActiveSessionId(s.id)}
-                      className={cn(
-                        "flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap max-w-[160px] transition-colors",
-                        s.id === activeSessionId
-                          ? "bg-accent text-accent-foreground"
-                          : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground",
-                        s.exited && "opacity-60"
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                          s.exited ? "bg-destructive" : "bg-chart-2"
-                        )}
-                      />
-                      <span className="truncate">{folderName(s.cwd)}</span>
-                      <span
-                        onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}
-                        className="ml-0.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                      >
-                        ×
-                      </span>
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => createSession()}
-                    className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground text-sm leading-none"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-              <div className="relative flex-shrink-0" style={{ height: terminalHeight }}>
+                className="flex items-center gap-0.5 flex-1 overflow-x-auto"
+                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+              >
                 {sessions.map((s) => (
-                  <div key={s.id} className={cn("absolute inset-0", s.id !== activeSessionId && "hidden")}>
-                    <Terminal sessionId={s.id} visible={s.id === activeSessionId} />
-                    {s.exited && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                        <div className="text-center">
-                          <p className="text-muted-foreground mb-3">
-                            Process exited (code: {s.exitCode})
-                          </p>
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => restartSession(s.id)}
-                          >
-                            Restart
-                          </Button>
-                        </div>
-                      </div>
+                  <button
+                    key={s.id}
+                    onClick={() => setActiveSessionId(s.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap max-w-[160px] transition-colors",
+                      s.id === activeSessionId
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground",
+                      s.exited && "opacity-60"
                     )}
-                  </div>
+                  >
+                    <span
+                      className={cn(
+                        "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                        s.exited ? "bg-destructive" : "bg-chart-2"
+                      )}
+                    />
+                    <span className="truncate">{folderName(s.cwd)}</span>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}
+                      className="ml-0.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      ×
+                    </span>
+                  </button>
                 ))}
+                <button
+                  onClick={() => createSession()}
+                  className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground text-sm leading-none"
+                >
+                  +
+                </button>
               </div>
-            </>
-          )}
+            </div>
+            <div className="relative flex-shrink-0" style={{ height: terminalHeight }}>
+              {sessions.map((s) => (
+                <div key={s.id} className={cn("absolute inset-0", s.id !== activeSessionId && "hidden")}>
+                  <Terminal sessionId={s.id} visible={s.id === activeSessionId && terminalVisible} />
+                  {s.exited && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                      <div className="text-center">
+                        <p className="text-muted-foreground mb-3">
+                          Process exited (code: {s.exitCode})
+                        </p>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => restartSession(s.id)}
+                        >
+                          Restart
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </TooltipProvider>

@@ -10,6 +10,7 @@ interface Props {
   dbPath: string | undefined;
   cwd: string | null;
   activeSessionId: string | null;
+  onShowTerminal?: () => void;
 }
 
 const TYPE_ICON: Record<string, LucideIcon> = {
@@ -138,7 +139,7 @@ function getRichLabel(ev: ActionEvent, chromeEvents: ChromeEvent[]): string {
   return describeChromeEvent(ce);
 }
 
-export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Props) {
+export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onShowTerminal }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -332,7 +333,8 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
 
       const promptPath = `${cwd}/recordings/${stem}/analyze.md`;
       await window.electronAPI.recorder.writeFile(promptPath, content);
-      window.electronAPI.pty.write(activeSessionId, `/analyze-recording recordings/${stem}/analyze.md\n`);
+      onShowTerminal?.();
+      window.electronAPI.pty.write(activeSessionId, `/analyze-recording recordings/${stem}/analyze.md\r`);
     } finally {
       setAnalyzing(false);
     }
