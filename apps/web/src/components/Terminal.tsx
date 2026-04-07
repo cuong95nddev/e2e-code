@@ -11,7 +11,6 @@ export function Terminal({ sessionId, visible }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const spawnedRef = useRef(false);
   const prevVisibleRef = useRef(visible);
 
   useEffect(() => {
@@ -110,12 +109,6 @@ export function Terminal({ sessionId, visible }: TerminalProps) {
     }
     prevVisibleRef.current = visible;
   }, [visible, sessionId]);
-
-  useEffect(() => {
-    if (!spawnedRef.current) {
-      spawnedRef.current = true;
-    }
-  }, []);
 
   return (
     <div

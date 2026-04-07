@@ -21,6 +21,10 @@ function generateSessionId(): string {
   return `session-${nextId++}-${Date.now()}`;
 }
 
+function formatElapsed(s: number): string {
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
 export function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -30,6 +34,9 @@ export function App() {
   const [terminalVisible, setTerminalVisible] = useState(() => localStorage.getItem("terminalVisible") !== "false");
   const [leftVisible, setLeftVisible] = useState(() => localStorage.getItem("leftVisible") !== "false");
   const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem("leftWidth")) || 288);
+  const [chromeActive, setChromeActive] = useState(false);
+  const [chromeStartTime, setChromeStartTime] = useState<number | null>(null);
+  const [chromeElapsed, setChromeElapsed] = useState(0);
   const isDragging = useRef(false);
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
@@ -156,6 +163,36 @@ export function App() {
     }
   }, []);
 
+  // Poll chrome bridge status
+  useEffect(() => {
+    let mounted = true;
+    const poll = async () => {
+      try {
+        const r = await fetch("http://localhost:7878/status", { signal: AbortSignal.timeout(1500) });
+        const data = await r.json() as { active: boolean; startTime: number | null };
+        if (mounted) {
+          setChromeActive(data.active);
+          setChromeStartTime(data.active ? (data.startTime ?? null) : null);
+        }
+      } catch {
+        if (mounted) setChromeActive(false);
+      }
+    };
+    poll();
+    const id = setInterval(poll, 3000);
+    return () => { mounted = false; clearInterval(id); };
+  }, []);
+
+  // Elapsed timer for active chrome recording
+  useEffect(() => {
+    if (!chromeActive || !chromeStartTime) { setChromeElapsed(0); return; }
+    setChromeElapsed(Math.floor((Date.now() - chromeStartTime) / 1000));
+    const id = setInterval(() => {
+      setChromeElapsed(Math.floor((Date.now() - chromeStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [chromeActive, chromeStartTime]);
+
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const folderName = (cwd: string) => cwd.split("/").pop() ?? cwd;
 
@@ -168,22 +205,44 @@ export function App() {
           style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
         >
           <div className="w-20 flex-shrink-0" />
+          {/* Chrome extension status */}
+          <div
+            className="flex items-center gap-1.5 text-xs select-none"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+          >
+            <div className={cn(
+              "w-1.5 h-1.5 rounded-full flex-shrink-0",
+              chromeActive ? "bg-destructive animate-pulse" : "bg-chart-2"
+            )} />
+            <span className={cn("font-sans", chromeActive ? "text-foreground" : "text-muted-foreground")}>
+              Extension
+            </span>
+            {chromeActive && (
+              <span className="text-muted-foreground font-mono tabular-nums">
+                {formatElapsed(chromeElapsed)}
+              </span>
+            )}
+          </div>
           <div className="flex-1" />
           <div className="flex items-center gap-1 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
             <Tooltip>
-              <TooltipTrigger>
-                <Button variant="ghost" size="icon" onClick={() => setLeftVisible((v) => !v)} className={cn(!leftVisible && "text-muted-foreground")}>
-                  <PanelLeft />
-                </Button>
-              </TooltipTrigger>
+              <TooltipTrigger
+                render={
+                  <Button variant="ghost" size="icon" onClick={() => setLeftVisible((v) => !v)} className={cn(!leftVisible && "text-muted-foreground")}>
+                    <PanelLeft />
+                  </Button>
+                }
+              />
               <TooltipContent>{leftVisible ? "Hide" : "Show"} sidebar</TooltipContent>
             </Tooltip>
             <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={() => setTerminalVisible((v) => !v)} className={cn(!terminalVisible && "text-muted-foreground")}>
-                  <PanelBottom />
-                </Button>
-              </TooltipTrigger>
+              <TooltipTrigger
+                render={
+                  <Button variant="ghost" size="icon" onClick={() => setTerminalVisible((v) => !v)} className={cn(!terminalVisible && "text-muted-foreground")}>
+                    <PanelBottom />
+                  </Button>
+                }
+              />
               <TooltipContent>{terminalVisible ? "Hide" : "Show"} terminal</TooltipContent>
             </Tooltip>
           </div>
