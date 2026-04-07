@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Terminal } from "./components/Terminal";
+import { RecordButton } from "./components/RecordButton";
 
 interface Session {
   id: string;
@@ -133,6 +134,10 @@ export function App() {
           >
             +
           </button>
+
+          <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+            <RecordButton cwd={activeSession?.cwd ?? null} />
+          </div>
         </div>
       </div>
 
