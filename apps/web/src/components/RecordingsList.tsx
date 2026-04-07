@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import { RecordingPlayer } from "./RecordingPlayer";
 
 interface Props {
   cwd: string | null;
   refreshKey: number;
   selectedPath: string | null;
-  onSelect: (path: string | null) => void;
+  onSelect: (r: RecordingMeta | null) => void;
 }
 
 function formatSize(bytes: number): string {
@@ -19,7 +18,6 @@ function formatName(name: string): string {
 
 export function RecordingsList({ cwd, refreshKey, selectedPath, onSelect }: Props) {
   const [recordings, setRecordings] = useState<RecordingMeta[]>([]);
-  const [playerRecording, setPlayerRecording] = useState<RecordingMeta | null>(null);
 
   useEffect(() => {
     if (!cwd) { setRecordings([]); return; }
@@ -47,31 +45,17 @@ export function RecordingsList({ cwd, refreshKey, selectedPath, onSelect }: Prop
             >
               <button
                 className="flex items-center gap-2 flex-1 min-w-0 text-left"
-                onClick={() => onSelect(selectedPath === r.path ? null : r.path)}
+                onClick={() => onSelect(selectedPath === r.path ? null : r)}
               >
                 <span className="text-sm">🎬</span>
                 <span className="flex-1 text-xs font-mono truncate">{formatName(r.name)}</span>
                 <span className="text-[10px] text-[#6e7681] flex-shrink-0">{formatSize(r.size)}</span>
-              </button>
-              <button
-                onClick={() => setPlayerRecording(r)}
-                className="flex-shrink-0 px-2 py-0.5 text-[10px] rounded border border-[#30363d] hover:border-[#388bfd] hover:text-[#388bfd] transition-colors"
-                title="Open player with action timeline"
-              >
-                ▶
               </button>
             </div>
           ))}
         </div>
       </div>
 
-      {playerRecording && (
-        <RecordingPlayer
-          videoPath={playerRecording.path}
-          dbPath={playerRecording.dbPath}
-          onClose={() => setPlayerRecording(null)}
-        />
-      )}
     </>
   );
 }

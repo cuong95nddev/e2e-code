@@ -18,7 +18,7 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "turbo run dev --filter=@e2e-code/desktop",
+    "dev": "turbo run dev --filter=@e2e-code/web --filter=@e2e-code/desktop",
     "dev:desktop": "turbo run dev --filter=@e2e-code/desktop",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck"

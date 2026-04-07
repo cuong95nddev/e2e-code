@@ -4,9 +4,10 @@ import { RecordingIndicator } from "./RecordingIndicator";
 
 interface Props {
   cwd: string | null;
+  onSaved?: (path: string) => void;
 }
 
-export function RecordButton({ cwd }: Props) {
+export function RecordButton({ cwd, onSaved }: Props) {
   const { recorderState, elapsed, savedPath, startRecording, stopRecording } = useRecorder();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mode, setMode] = useState<RecorderMode>("screen");
@@ -47,6 +48,7 @@ export function RecordButton({ cwd }: Props) {
     if (!savedPath) return;
     const fileName = savedPath.split("/").pop() ?? savedPath;
     setToast(`Saved: recordings/${fileName}`);
+    onSaved?.(savedPath);
     const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [savedPath]);
@@ -111,7 +113,7 @@ export function RecordButton({ cwd }: Props) {
               className="fixed inset-0 z-10"
               onClick={() => setPickerOpen(false)}
             />
-            <div className="absolute right-0 top-full mt-1 w-72 bg-[#161b22] border border-[#30363d] rounded-xl p-3 shadow-2xl z-20 font-sans">
+            <div className="absolute left-0 top-full mt-1 w-72 bg-[#161b22] border border-[#30363d] rounded-xl p-3 shadow-2xl z-20 font-sans">
               <div className="text-[10px] text-[#6e7681] uppercase tracking-widest mb-2">
                 Chế độ
               </div>
