@@ -1,0 +1,16 @@
+{
+  "name": "@e2e-code/chrome-extension",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.324",
+    "@types/node": "catalog:",
+    "esbuild": "^0.25.0",
+    "typescript": "catalog:"
+  }
+}

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 220px;
+    font-family: -apple-system, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 12px;
+  }
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: #8b949e;
+    margin-bottom: 10px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #30363d;
+    flex-shrink: 0;
+  }
+  .dot.connected { background: #3fb950; }
+  .dot.recording { background: #f85149; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  .timer { font-size: 11px; color: #8b949e; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+  button {
+    width: 100%;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: #21262d;
+    color: #e6edf3;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  button:hover { background: #30363d; }
+  button.start { border-color: #388bfd; color: #388bfd; }
+  button.stop  { border-color: #f85149; color: #f85149; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .events { font-size: 10px; color: #6e7681; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <div class="status">
+    <div class="dot" id="conn-dot"></div>
+    <span id="conn-label">Checking connection…</span>
+  </div>
+  <div class="timer" id="timer" style="display:none"></div>
+  <button id="btn" disabled>Start Recording</button>
+  <div class="events" id="event-count"></div>
+  <script src="popup.js"></script>
+</body>
+</html>
