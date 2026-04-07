@@ -5,8 +5,4 @@ import "./index.css";
 import { App } from "./App";
 
 document.title = "Claude Desktop";
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<App />);
