@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
 import { useRecorder, type RecorderMode } from "../hooks/useRecorder";
 import { RecordingIndicator } from "./RecordingIndicator";
+import { Button } from "~/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
+import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { cn } from "~/lib/utils";
 
 interface Props {
   cwd: string | null;
@@ -22,7 +26,6 @@ export function RecordButton({ cwd, onSaved }: Props) {
     window.electronAPI.recorder.getSources().then((srcs) => {
       if (cancelled) return;
       setSources(srcs);
-      // Auto-select first screen source
       const firstScreen = srcs.find((s) => s.id.startsWith("screen:"));
       if (firstScreen) {
         setSelectedSourceId((current) => current ?? firstScreen.id);
@@ -85,7 +88,7 @@ export function RecordButton({ cwd, onSaved }: Props) {
       <>
         <RecordingIndicator elapsed={elapsed} onStop={stopRecording} />
         {toast && (
-          <div className="fixed bottom-4 right-4 z-50 bg-[#161b22] border border-[#30363d] text-[#e6edf3] text-xs px-4 py-2 rounded-lg shadow-lg">
+          <div className="fixed bottom-4 right-4 z-50 bg-card border border-border text-card-foreground text-xs px-4 py-2 rounded-lg shadow-lg">
             {toast}
           </div>
         )}
@@ -95,98 +98,80 @@ export function RecordButton({ cwd, onSaved }: Props) {
 
   return (
     <>
-      <div className="relative">
-        <button
-          onClick={() => setPickerOpen((v) => !v)}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-[#30363d] bg-[#21262d] text-[#e6edf3] text-xs hover:bg-[#30363d] transition-colors"
-        >
-          <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+      <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+        {/* PopoverTrigger (base-nova) renders its own element; render trigger content inline */}
+        <PopoverTrigger className="flex items-center gap-1.5 h-7 rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted hover:text-foreground transition-all">
+          <span className="w-2 h-2 rounded-full bg-destructive flex-shrink-0" />
           Record
-          <span className="ml-0.5 text-[10px] text-[#6e7681] bg-[#161b22] px-1 py-0.5 rounded font-sans">
+          <span className="ml-0.5 text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-sans">
             ⌘⇧5
           </span>
-        </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-3 font-sans" align="start">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">
+            Chế độ
+          </div>
+          <Tabs value={mode} onValueChange={(v) => setMode(v as RecorderMode)} className="mb-3">
+            <TabsList className="w-full">
+              <TabsTrigger value="screen" className="flex-1 text-[11px]">🖥 Toàn màn hình</TabsTrigger>
+              <TabsTrigger value="window" className="flex-1 text-[11px]">🪟 Cửa sổ</TabsTrigger>
+              <TabsTrigger value="region" className="flex-1 text-[11px]">✂️ Vùng chọn</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-        {pickerOpen && (
-          <>
-            <div
-              className="fixed inset-0 z-10"
-              onClick={() => setPickerOpen(false)}
-            />
-            <div className="absolute left-0 top-full mt-1 w-72 bg-[#161b22] border border-[#30363d] rounded-xl p-3 shadow-2xl z-20 font-sans">
-              <div className="text-[10px] text-[#6e7681] uppercase tracking-widest mb-2">
-                Chế độ
+          {mode !== "region" && (
+            <>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">
+                {mode === "screen" ? "Màn hình" : "Cửa sổ"}
               </div>
-              <div className="flex gap-1.5 mb-3">
-                {(["screen", "window", "region"] as RecorderMode[]).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setMode(m)}
-                    className={`flex-1 py-2 rounded-lg border text-[11px] transition-colors ${
-                      mode === m
-                        ? "border-[#388bfd] bg-[#0d1117] text-[#e6edf3]"
-                        : "border-[#30363d] bg-[#0d1117] text-[#6e7681] hover:text-[#c9d1d9]"
-                    }`}
-                  >
-                    {m === "screen" ? "🖥 Toàn màn hình" : m === "window" ? "🪟 Cửa sổ" : "✂️ Vùng chọn"}
-                  </button>
-                ))}
-              </div>
-
-              {mode !== "region" && (
-                <>
-                  <div className="text-[10px] text-[#6e7681] uppercase tracking-widest mb-2">
-                    {mode === "screen" ? "Màn hình" : "Cửa sổ"}
-                  </div>
-                  {sourcesForMode.length === 0 ? (
-                    <div className="text-[11px] text-[#6e7681] mb-3">Đang tải...</div>
-                  ) : (
-                    <div className="flex gap-2 flex-wrap mb-3">
-                      {sourcesForMode.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => setSelectedSourceId(s.id)}
-                          className={`p-1.5 rounded-lg border transition-colors ${
-                            selectedSourceId === s.id
-                              ? "border-[#388bfd]"
-                              : "border-[#30363d] hover:border-[#6e7681]"
-                          } bg-[#0d1117]`}
-                        >
-                          <img
-                            src={s.thumbnail}
-                            className="w-20 h-12 rounded object-cover mb-1"
-                            alt={s.name}
-                          />
-                          <div className="text-[10px] text-[#8b949e] truncate max-w-[80px]">
-                            {s.name}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {mode === "region" && (
-                <div className="mb-3 py-3 border border-dashed border-[#30363d] rounded-lg text-center text-[#6e7681] text-xs">
-                  ✂️ Kéo chọn vùng sau khi nhấn bắt đầu
+              {sourcesForMode.length === 0 ? (
+                <div className="text-[11px] text-muted-foreground mb-3">Đang tải...</div>
+              ) : (
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {sourcesForMode.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedSourceId(s.id)}
+                      className={cn(
+                        "p-1.5 rounded-lg border transition-colors bg-background",
+                        selectedSourceId === s.id
+                          ? "border-primary"
+                          : "border-border hover:border-border/70"
+                      )}
+                    >
+                      <img
+                        src={s.thumbnail}
+                        className="w-20 h-12 rounded object-cover mb-1"
+                        alt={s.name}
+                      />
+                      <div className="text-[10px] text-muted-foreground truncate max-w-[80px]">
+                        {s.name}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
+            </>
+          )}
 
-              <button
-                onClick={handleStart}
-                disabled={mode !== "region" && !selectedSourceId}
-                className="w-full py-2 bg-[#238636] hover:bg-[#2ea043] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold transition-colors"
-              >
-                Bắt đầu quay ⏺
-              </button>
+          {mode === "region" && (
+            <div className="mb-3 py-3 border border-dashed border-border rounded-lg text-center text-muted-foreground text-xs">
+              ✂️ Kéo chọn vùng sau khi nhấn bắt đầu
             </div>
-          </>
-        )}
-      </div>
+          )}
+
+          <Button
+            className="w-full"
+            onClick={handleStart}
+            disabled={mode !== "region" && !selectedSourceId}
+          >
+            Bắt đầu quay ⏺
+          </Button>
+        </PopoverContent>
+      </Popover>
 
       {toast && (
-        <div className="fixed bottom-4 right-4 z-50 bg-[#161b22] border border-[#30363d] text-[#e6edf3] text-xs px-4 py-2 rounded-lg shadow-lg">
+        <div className="fixed bottom-4 right-4 z-50 bg-card border border-border text-card-foreground text-xs px-4 py-2 rounded-lg shadow-lg">
           {toast}
         </div>
       )}
