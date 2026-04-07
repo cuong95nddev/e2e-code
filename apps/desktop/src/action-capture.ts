@@ -86,12 +86,12 @@ function openDb(dbPath: string, startTime: number): SessionState {
 
 export function startCapture(dbPath: string, startTime: number = Date.now()): { captureActive: boolean } {
   if (session) {
-    uIOhook.stop();
     uIOhook.off("mousedown", handlers.mousedown);
     uIOhook.off("mouseup",   handlers.mouseup);
     uIOhook.off("keydown",   handlers.keydown);
     uIOhook.off("keyup",     handlers.keyup);
     uIOhook.off("wheel",     handlers.wheel);
+    uIOhook.stop();
     session.db.close();
     session = null;
   }
@@ -118,12 +118,12 @@ export function startCapture(dbPath: string, startTime: number = Date.now()): { 
 
 export function stopCapture(): void {
   if (!session) return;
-  uIOhook.stop();
   uIOhook.off("mousedown", handlers.mousedown);
   uIOhook.off("mouseup",   handlers.mouseup);
   uIOhook.off("keydown",   handlers.keydown);
   uIOhook.off("keyup",     handlers.keyup);
   uIOhook.off("wheel",     handlers.wheel);
+  uIOhook.stop();
   session.db.close();
   session = null;
 }

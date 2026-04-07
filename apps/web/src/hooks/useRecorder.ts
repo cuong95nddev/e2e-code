@@ -104,13 +104,13 @@ export function useRecorder() {
 
         const blob = new Blob(chunksRef.current, { type: "video/webm" });
         const buffer = await blob.arrayBuffer();
+        window.electronAPI.recorder.hideTray();
         try {
           const path = await window.electronAPI.recorder.saveFile(
             cwdRef.current,
             buffer,
             stemRef.current,
           );
-          window.electronAPI.recorder.hideTray();
           setSavedPath(path);
           setSavedDbPath(dbPathRef.current);
           setRecorderState("idle");
