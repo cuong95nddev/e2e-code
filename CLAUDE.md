@@ -26,7 +26,7 @@ Electron Main (node-pty) → IPC → Renderer (React + xterm.js) → User
 ```
 
 - `packages/shared` — Utilities (Net, models, logging). No build step.
-- `apps/web` — React UI with xterm.js terminal (embedded in desktop app). Not run standalone.
+- `apps/web` — React UI with xterm.js terminal (embedded in desktop app). Uses shadcn/ui component library (`src/components/ui/`). Not run standalone.
 - `apps/desktop` — Electron main process with PTY manager, IPC handlers, preload bridge.
 
 ## Native Modules

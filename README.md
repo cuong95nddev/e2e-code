@@ -7,7 +7,7 @@ A desktop app that helps you write and execute E2E tests more easily with AI age
 ```
 apps/
   desktop/          Electron shell — spawns Claude Code CLI via node-pty, loads web UI
-  web/              React frontend — xterm.js terminal, Tailwind CSS
+  web/              React frontend — xterm.js terminal, shadcn/ui, Tailwind CSS 4
   chrome-extension/ Chrome MV3 extension — records browser actions with DOM context
 packages/
   shared/           Logging utilities
@@ -25,7 +25,7 @@ Electron Main (node-pty) → IPC → Renderer (React + xterm.js) → User
 |-------|-----------|
 | Runtime | Bun 1.3.9 + Node 24 |
 | Monorepo | Turborepo + Bun workspaces |
-| Frontend | React 19, Vite 8, xterm.js, Tailwind CSS 4 |
+| Frontend | React 19, Vite 8, xterm.js, shadcn/ui, Tailwind CSS 4 |
 | Desktop | Electron 40 |
 | Terminal | node-pty + xterm.js |
 
