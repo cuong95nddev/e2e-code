@@ -58,6 +58,8 @@ interface ElectronAPI {
     sessionStart(cwd: string): Promise<{ dbPath: string | null; stem: string; startTime: number; captureActive: boolean }>;
     sessionStop(): Promise<void>;
     queryActions(dbPath: string, fromMs: number, toMs: number): Promise<ActionEvent[]>;
+    saveFrame(framePath: string, buffer: ArrayBuffer): Promise<void>;
+    writeFile(filePath: string, content: string): Promise<void>;
   };
 }
 

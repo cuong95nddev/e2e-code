@@ -3,7 +3,8 @@ import { useRef, useState, useEffect, useCallback } from "react";
 interface Props {
   videoPath: string;
   dbPath: string | undefined;
-  onClose: () => void;
+  cwd: string | null;
+  activeSessionId: string | null;
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -48,12 +49,51 @@ function describeEvent(e: ActionEvent): string {
   return "";
 }
 
-export function RecordingPlayer({ videoPath, dbPath, onClose }: Props) {
+function filterKeyEvents(events: ActionEvent[]): ActionEvent[] {
+  const result: ActionEvent[] = [];
+  let lastKeydownTs = -Infinity;
+  for (const e of events) {
+    if (e.type === "mousedown") {
+      result.push(e);
+    } else if (e.type === "keydown") {
+      if (e.ts_ms - lastKeydownTs > 500) {
+        result.push(e);
+      }
+      lastKeydownTs = e.ts_ms;
+    }
+  }
+  return result;
+}
+
+async function extractFrame(
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  tsMs: number,
+): Promise<ArrayBuffer> {
+  await new Promise<void>((resolve) => {
+    const onSeeked = () => { video.removeEventListener("seeked", onSeeked); resolve(); };
+    video.addEventListener("seeked", onSeeked);
+    video.currentTime = tsMs / 1000;
+  });
+  const ctx = canvas.getContext("2d")!;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.drawImage(video, 0, 0);
+  return new Promise<ArrayBuffer>((resolve) => {
+    canvas.toBlob((blob) => {
+      blob!.arrayBuffer().then(resolve);
+    }, "image/jpeg", 0.85);
+  });
+}
+
+export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [events, setEvents] = useState<ActionEvent[]>([]);
   const [duration, setDuration] = useState(0);
   const [currentMs, setCurrentMs] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const handleMetadata = useCallback(async () => {
     const d = videoRef.current?.duration ?? 0;
@@ -73,6 +113,52 @@ export function RecordingPlayer({ videoPath, dbPath, onClose }: Props) {
     videoRef.current.currentTime = ms / 1000;
   }, []);
 
+  const stem = videoPath.split("/").pop()?.replace(".webm", "") ?? "recording";
+
+  const handleAnalyze = useCallback(async () => {
+    if (!cwd || !activeSessionId || !videoRef.current || !canvasRef.current) return;
+    setAnalyzing(true);
+    try {
+      const keyEvents = filterKeyEvents(events);
+      const framesDir = `${cwd}/recordings/${stem}/frames`;
+
+      const rows: string[] = [];
+      for (let i = 0; i < keyEvents.length; i++) {
+        const ev = keyEvents[i]!;
+        const framePath = `${framesDir}/frame-${ev.ts_ms}.jpg`;
+        const buffer = await extractFrame(videoRef.current, canvasRef.current, ev.ts_ms);
+        await window.electronAPI.recorder.saveFrame(framePath, buffer);
+
+        const relFrame = `recordings/${stem}/frames/frame-${ev.ts_ms}.jpg`;
+        const detail = describeEvent(ev);
+        rows.push(`| ${i + 1} | ${formatMs(ev.ts_ms)} | ${ev.type} | ${detail} | ${relFrame} |`);
+      }
+
+      const promptPath = `${cwd}/recordings/${stem}/analyze.md`;
+      const content = [
+        `# Recording Analysis Task`,
+        ``,
+        `## Your job`,
+        `Invoke the /analyze-recording skill to analyze this recording.`,
+        ``,
+        `## Frames directory`,
+        `recordings/${stem}/frames/`,
+        ``,
+        `## Action Events`,
+        `| # | Time | Type | Detail | Frame |`,
+        `|---|------|------|--------|-------|`,
+        ...rows,
+      ].join("\n");
+
+      await window.electronAPI.recorder.writeFile(promptPath, content);
+
+      const relPrompt = `recordings/${stem}/analyze.md`;
+      window.electronAPI.pty.write(activeSessionId, `/analyze-recording ${relPrompt}\n`);
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [cwd, activeSessionId, events, stem]);
+
   useEffect(() => {
     if (!listRef.current || events.length === 0) return;
     const idx = events.findIndex((e) => e.ts_ms > currentMs) - 1;
@@ -82,19 +168,7 @@ export function RecordingPlayer({ videoPath, dbPath, onClose }: Props) {
   }, [currentMs, events]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center font-sans">
-      <div className="w-[90vw] max-w-5xl bg-[#0d1117] border border-[#30363d] rounded-xl overflow-hidden flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-[#30363d]">
-          <span className="text-xs text-[#8b949e]">Recording Player</span>
-          <button
-            onClick={onClose}
-            className="text-[#6e7681] hover:text-white text-lg leading-none"
-          >
-            ×
-          </button>
-        </div>
-
+    <div className="flex flex-col h-full font-sans bg-[#0d1117]">
         {/* Video */}
         <div className="bg-black flex-shrink-0">
           <video
@@ -105,6 +179,27 @@ export function RecordingPlayer({ videoPath, dbPath, onClose }: Props) {
             onLoadedMetadata={handleMetadata}
             onTimeUpdate={handleTimeUpdate}
           />
+          {events.length > 0 && (
+            <div className="flex justify-end px-3 py-1.5">
+              <button
+                onClick={handleAnalyze}
+                disabled={analyzing || !cwd || !activeSessionId}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-md border border-[#30363d] bg-[#21262d] text-[#e6edf3] text-xs hover:bg-[#30363d] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {analyzing ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse flex-shrink-0" />
+                    Analyzing…
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[#3fb950]">✦</span>
+                    Analyze with Claude
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Timeline */}
@@ -145,6 +240,9 @@ export function RecordingPlayer({ videoPath, dbPath, onClose }: Props) {
           </div>
         )}
 
+        {/* Hidden canvas for frame extraction */}
+        <canvas ref={canvasRef} className="hidden" />
+
         {/* Event list */}
         <div
           ref={listRef}
@@ -178,7 +276,6 @@ export function RecordingPlayer({ videoPath, dbPath, onClose }: Props) {
             </button>
           ))}
         </div>
-      </div>
     </div>
   );
 }

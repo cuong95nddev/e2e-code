@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Terminal } from "./components/Terminal";
 import { RecordButton } from "./components/RecordButton";
+import { RecordingsList } from "./components/RecordingsList";
+import { RecordingPlayer } from "./components/RecordingPlayer";
 
 interface Session {
   id: string;
@@ -19,6 +21,13 @@ function generateSessionId(): string {
 export function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [recordingRefreshKey, setRecordingRefreshKey] = useState(0);
+  const [selectedRecording, setSelectedRecording] = useState<RecordingMeta | null>(null);
+  const [terminalHeight, setTerminalHeight] = useState(300);
+  const [terminalVisible, setTerminalVisible] = useState(true);
+  const isDragging = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
 
   const createSession = useCallback(async (cwd?: string) => {
     const folder = cwd ?? (await window.electronAPI.app.pickFolder());
@@ -85,19 +94,45 @@ export function App() {
     }
   }, []);
 
+  // Drag-to-resize terminal panel
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = dragStartY.current - e.clientY;
+      const newHeight = Math.max(150, Math.min(dragStartHeight.current + delta, window.innerHeight * 0.8));
+      setTerminalHeight(newHeight);
+    };
+    const onMouseUp = () => { isDragging.current = false; };
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    isDragging.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = terminalHeight;
+    e.preventDefault();
+  };
+
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const folderName = (cwd: string) => cwd.split("/").pop() ?? cwd;
 
   return (
     <div className="h-screen flex flex-col bg-[#0d1117] text-[#e6edf3]">
       {/* Tab bar */}
-      <div className="flex items-center h-10 bg-[#010409] border-b border-[#30363d] select-none"
+      <div
+        className="flex items-center h-10 bg-[#010409] border-b border-[#30363d] select-none"
         style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
       >
         {/* macOS traffic light spacing */}
         <div className="w-20 flex-shrink-0" />
 
-        <div className="flex items-center gap-0.5 overflow-x-auto flex-1 px-1"
+        <div
+          className="flex items-center gap-0.5 overflow-x-auto flex-1 px-1"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
           {sessions.map((s) => (
@@ -127,53 +162,145 @@ export function App() {
             </button>
           ))}
 
-          <button
-            onClick={() => createSession()}
-            className="px-2 py-1.5 text-[#8b949e] hover:text-white text-sm"
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-          >
-            +
-          </button>
-
-          <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
-            <RecordButton cwd={activeSession?.cwd ?? null} />
-          </div>
         </div>
       </div>
 
-      {/* Terminal area */}
-      <div className="flex-1 min-h-0 relative">
-        {sessions.map((s) => (
-          <div key={s.id} className={`absolute inset-0 ${s.id === activeSessionId ? "" : "hidden"}`}>
-            <Terminal
-              sessionId={s.id}
-              visible={s.id === activeSessionId}
+      {/* Main content area */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {/* Top content — two columns */}
+        <div className="flex-1 min-h-0 flex overflow-hidden">
+          {/* Left: actions + recordings list */}
+          <div className="w-72 flex-shrink-0 flex flex-col border-r border-[#30363d] p-3 overflow-y-auto">
+            <RecordButton
+              cwd={activeSession?.cwd ?? null}
+              onSaved={() => { setRecordingRefreshKey((k) => k + 1); }}
             />
-            {s.exited && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                <div className="text-center">
-                  <p className="text-[#8b949e] mb-3">
-                    Process exited (code: {s.exitCode})
-                  </p>
-                  <button
-                    onClick={() => restartSession(s.id)}
-                    className="px-4 py-2 bg-[#238636] text-white rounded-md text-sm hover:bg-[#2ea043]"
-                  >
-                    Restart
-                  </button>
-                </div>
+            <RecordingsList
+              cwd={activeSession?.cwd ?? null}
+              refreshKey={recordingRefreshKey}
+              selectedPath={selectedRecording?.path ?? null}
+              onSelect={setSelectedRecording}
+            />
+            {sessions.length === 0 && (
+              <div className="flex items-center justify-center flex-1">
+                <button
+                  onClick={() => createSession()}
+                  className="px-6 py-3 bg-[#238636] text-white rounded-md hover:bg-[#2ea043]"
+                >
+                  Open Project Folder
+                </button>
               </div>
             )}
           </div>
-        ))}
 
-        {sessions.length === 0 && (
-          <div className="flex items-center justify-center h-full">
+          {/* Right: video player */}
+          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+            {selectedRecording ? (
+              <RecordingPlayer
+                key={selectedRecording.path}
+                videoPath={selectedRecording.path}
+                dbPath={selectedRecording.dbPath}
+                cwd={activeSession?.cwd ?? null}
+                activeSessionId={activeSessionId}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full bg-black">
+                <span className="text-[#3d444d] text-sm font-sans select-none">
+                  Chọn một recording để xem
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Terminal panel */}
+        {terminalVisible ? (
+          <>
+            {/* Drag handle */}
+            <div
+              className="h-1 bg-[#30363d] hover:bg-[#388bfd] cursor-ns-resize transition-colors flex-shrink-0"
+              onMouseDown={handleDragStart}
+            />
+            {/* Terminal header */}
+            <div className="flex items-center h-8 bg-[#010409] border-t border-[#30363d] flex-shrink-0 px-2 gap-1">
+              <span className="text-[10px] text-[#6e7681] uppercase tracking-widest font-sans px-1">
+                Terminal
+              </span>
+              {/* Session tabs */}
+              <div className="flex items-center gap-0.5 flex-1 overflow-x-auto">
+                {sessions.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => setActiveSessionId(s.id)}
+                    className={`
+                      flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap max-w-[160px]
+                      transition-colors
+                      ${s.id === activeSessionId
+                        ? "bg-[#161b22] text-[#e6edf3]"
+                        : "text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]"
+                      }
+                      ${s.exited ? "opacity-60" : ""}
+                    `}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.exited ? "bg-red-500" : "bg-green-500"}`} />
+                    <span className="truncate">{folderName(s.cwd)}</span>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}
+                      className="ml-0.5 text-[#8b949e] hover:text-white cursor-pointer"
+                    >
+                      ×
+                    </span>
+                  </button>
+                ))}
+                <button
+                  onClick={() => createSession()}
+                  className="px-1.5 py-0.5 text-[#8b949e] hover:text-white text-sm leading-none"
+                >
+                  +
+                </button>
+              </div>
+              <button
+                onClick={() => setTerminalVisible(false)}
+                className="text-[#6e7681] hover:text-white text-sm leading-none flex-shrink-0"
+              >
+                ×
+              </button>
+            </div>
+            {/* Terminal content */}
+            <div className="relative flex-shrink-0" style={{ height: terminalHeight }}>
+              {sessions.map((s) => (
+                <div key={s.id} className={`absolute inset-0 ${s.id === activeSessionId ? "" : "hidden"}`}>
+                  <Terminal
+                    sessionId={s.id}
+                    visible={s.id === activeSessionId}
+                  />
+                  {s.exited && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                      <div className="text-center">
+                        <p className="text-[#8b949e] mb-3">
+                          Process exited (code: {s.exitCode})
+                        </p>
+                        <button
+                          onClick={() => restartSession(s.id)}
+                          className="px-4 py-2 bg-[#238636] text-white rounded-md text-sm hover:bg-[#2ea043]"
+                        >
+                          Restart
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          /* Show terminal toggle button at bottom when hidden */
+          <div className="flex items-center h-7 bg-[#010409] border-t border-[#30363d] px-3 flex-shrink-0">
             <button
-              onClick={() => createSession()}
-              className="px-6 py-3 bg-[#238636] text-white rounded-md hover:bg-[#2ea043]"
+              onClick={() => setTerminalVisible(true)}
+              className="text-[10px] text-[#6e7681] uppercase tracking-widest hover:text-white font-sans transition-colors"
             >
-              Open Project Folder
+              Terminal
             </button>
           </div>
         )}
