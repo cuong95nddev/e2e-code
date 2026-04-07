@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 
@@ -18,18 +18,18 @@ export function Terminal({ sessionId, visible }: TerminalProps) {
 
     const term = new XTerm({
       theme: {
-        background: "#0d1117",
-        foreground: "#e6edf3",
-        cursor: "#58a6ff",
-        selectionBackground: "#264f78",
-        black: "#0d1117",
+        background: "#09090b",    // zinc-950
+        foreground: "#fafafa",    // zinc-50
+        cursor: "#a1a1aa",        // zinc-400
+        selectionBackground: "#3f3f46", // zinc-700
+        black: "#18181b",
         red: "#e94560",
-        green: "#0f9b58",
-        yellow: "#f4b400",
-        blue: "#4285f4",
-        magenta: "#ab47bc",
-        cyan: "#00acc1",
-        white: "#e6edf3",
+        green: "#22c55e",
+        yellow: "#eab308",
+        blue: "#3b82f6",
+        magenta: "#a855f7",
+        cyan: "#06b6d4",
+        white: "#fafafa",
       },
       fontFamily: '"SF Mono", "Fira Code", "Cascadia Code", monospace',
       fontSize: 14,
@@ -106,19 +106,16 @@ export function Terminal({ sessionId, visible }: TerminalProps) {
     }
   }, [visible, sessionId]);
 
-  // Spawn PTY once mounted
   useEffect(() => {
     if (!spawnedRef.current) {
       spawnedRef.current = true;
-      // sessionId doubles as cwd for now — App passes cwd as the session's cwd
-      // The actual spawn is triggered by the parent via onSpawn
     }
   }, []);
 
   return (
     <div
       ref={containerRef}
-      className="flex-1 min-h-0"
+      className="flex-1 min-h-0 bg-background"
       style={{ display: visible ? "block" : "none" }}
     />
   );
