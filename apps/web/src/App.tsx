@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Terminal } from "./components/Terminal";
 import { RecordingsList } from "./components/RecordingsList";
 import { RecordingPlayer } from "./components/RecordingPlayer";
+import { Button } from "~/components/ui/button";
+import { TooltipProvider } from "~/components/ui/tooltip";
+import { cn } from "~/lib/utils";
 
 interface Session {
   id: string;
@@ -51,7 +54,6 @@ export function App() {
     setSessions((prev) => [...prev, session]);
     setActiveSessionId(id);
 
-    // Spawn PTY after state update
     requestAnimationFrame(() => {
       window.electronAPI.pty.create(id, folder, null, false);
     });
@@ -117,13 +119,11 @@ export function App() {
     e.preventDefault();
   };
 
-  // Keep chrome-bridge cwd in sync with active session so recordings land in the right folder
   useEffect(() => {
     const cwd = sessions.find((s) => s.id === activeSessionId)?.cwd;
     if (cwd) window.electronAPI.chrome.setActiveCwd(cwd);
   }, [activeSessionId, sessions]);
 
-  // Listen for file list changes (e.g. new recording saved by chrome extension)
   useEffect(() => {
     const off = window.electronAPI.recorder.onFileListChanged(() => {
       setRecordingRefreshKey((k) => k + 1);
@@ -131,7 +131,6 @@ export function App() {
     return off;
   }, []);
 
-  // Listen for PTY exit events
   useEffect(() => {
     const unsubExit = window.electronAPI.pty.onExit((sessionId, exitCode) => {
       setSessions((prev) =>
@@ -143,7 +142,6 @@ export function App() {
     return unsubExit;
   }, []);
 
-  // Create first session on mount if none exist
   useEffect(() => {
     if (sessions.length === 0) {
       createSession();
@@ -154,124 +152,159 @@ export function App() {
   const folderName = (cwd: string) => cwd.split("/").pop() ?? cwd;
 
   return (
-    <div className="h-screen flex flex-col bg-[#0d1117] text-[#e6edf3]">
-      {/* Tab bar */}
-      <div
-        className="flex items-center h-10 bg-[#010409] border-b border-[#30363d] select-none"
-        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
-      >
-        {/* macOS traffic light spacing */}
-        <div className="w-20 flex-shrink-0" />
-
-        <div className="flex-1" />
-      </div>
-
-      {/* Main content area */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        {/* Top content — two columns */}
-        <div className="flex-1 min-h-0 flex overflow-hidden">
-          {/* Left: actions + recordings list */}
-          <div className="flex-shrink-0 flex flex-col border-r border-[#30363d] p-3 overflow-y-auto" style={{ width: leftWidth }}>
-            <RecordingsList
-              cwd={activeSession?.cwd ?? null}
-              refreshKey={recordingRefreshKey}
-              selectedPath={selectedRecording?.path ?? null}
-              onSelect={setSelectedRecording}
-            />
-            {sessions.length === 0 && (
-              <div className="flex items-center justify-center flex-1">
-                <button
-                  onClick={() => createSession()}
-                  className="px-6 py-3 bg-[#238636] text-white rounded-md hover:bg-[#2ea043]"
-                >
-                  Open Project Folder
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Left/Right resize handle */}
-          <div
-            className="w-1 flex-shrink-0 bg-[#30363d] hover:bg-[#388bfd] cursor-col-resize transition-colors"
-            onMouseDown={handleLeftDragStart}
-          />
-
-          {/* Right: video player */}
-          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
-            {selectedRecording ? (
-              <RecordingPlayer
-                key={selectedRecording.path}
-                videoPath={selectedRecording.path}
-                dbPath={selectedRecording.dbPath}
-                cwd={activeSession?.cwd ?? null}
-                activeSessionId={activeSessionId}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full bg-black">
-                <span className="text-[#3d444d] text-sm font-sans select-none">
-                  Chọn một recording để xem
-                </span>
-              </div>
-            )}
-          </div>
+    <TooltipProvider>
+      <div className="h-screen flex flex-col bg-background text-foreground">
+        {/* Title bar */}
+        <div
+          className="flex items-center h-10 bg-card border-b border-border select-none"
+          style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+        >
+          <div className="w-20 flex-shrink-0" />
+          <div className="flex-1" />
         </div>
 
-        {/* Terminal panel */}
-        {terminalVisible ? (
-          <>
+        {/* Main content area */}
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* Top content — two columns */}
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+            {/* Left: recordings list */}
             <div
-              className="h-1 bg-[#30363d] hover:bg-[#388bfd] cursor-ns-resize transition-colors flex-shrink-0"
-              onMouseDown={handleDragStart}
-            />
-            <div className="flex items-center h-8 bg-[#010409] border-t border-[#30363d] flex-shrink-0 px-2 gap-1">
-              <span className="text-[10px] text-[#6e7681] uppercase tracking-widest font-sans px-1">
-                Terminal
-              </span>
-              <div className="flex items-center gap-0.5 flex-1 overflow-x-auto">
-                {sessions.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => setActiveSessionId(s.id)}
-                    className={`
-                      flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap max-w-[160px]
-                      transition-colors
-                      ${s.id === activeSessionId ? "bg-[#161b22] text-[#e6edf3]" : "text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]"}
-                      ${s.exited ? "opacity-60" : ""}
-                    `}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.exited ? "bg-red-500" : "bg-green-500"}`} />
-                    <span className="truncate">{folderName(s.cwd)}</span>
-                    <span onClick={(e) => { e.stopPropagation(); closeSession(s.id); }} className="ml-0.5 text-[#8b949e] hover:text-white cursor-pointer">×</span>
-                  </button>
-                ))}
-                <button onClick={() => createSession()} className="px-1.5 py-0.5 text-[#8b949e] hover:text-white text-sm leading-none">+</button>
-              </div>
-              <button onClick={() => setTerminalVisible(false)} className="text-[#6e7681] hover:text-white text-sm leading-none flex-shrink-0">×</button>
-            </div>
-            <div className="relative flex-shrink-0" style={{ height: terminalHeight }}>
-              {sessions.map((s) => (
-                <div key={s.id} className={`absolute inset-0 ${s.id === activeSessionId ? "" : "hidden"}`}>
-                  <Terminal sessionId={s.id} visible={s.id === activeSessionId} />
-                  {s.exited && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                      <div className="text-center">
-                        <p className="text-[#8b949e] mb-3">Process exited (code: {s.exitCode})</p>
-                        <button onClick={() => restartSession(s.id)} className="px-4 py-2 bg-[#238636] text-white rounded-md text-sm hover:bg-[#2ea043]">Restart</button>
-                      </div>
-                    </div>
-                  )}
+              className="flex-shrink-0 flex flex-col border-r border-border p-3 overflow-y-auto"
+              style={{ width: leftWidth }}
+            >
+              <RecordingsList
+                cwd={activeSession?.cwd ?? null}
+                refreshKey={recordingRefreshKey}
+                selectedPath={selectedRecording?.path ?? null}
+                onSelect={setSelectedRecording}
+              />
+              {sessions.length === 0 && (
+                <div className="flex items-center justify-center flex-1">
+                  <Button onClick={() => createSession()}>
+                    Open Project Folder
+                  </Button>
                 </div>
-              ))}
+              )}
             </div>
-          </>
-        ) : (
-          <div className="flex items-center h-7 bg-[#010409] border-t border-[#30363d] px-3 flex-shrink-0">
-            <button onClick={() => setTerminalVisible(true)} className="text-[10px] text-[#6e7681] uppercase tracking-widest hover:text-white font-sans transition-colors">
-              Terminal
-            </button>
+
+            {/* Left/Right resize handle */}
+            <div
+              className="w-1 flex-shrink-0 bg-border hover:bg-primary/40 cursor-col-resize transition-colors"
+              onMouseDown={handleLeftDragStart}
+            />
+
+            {/* Right: video player */}
+            <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+              {selectedRecording ? (
+                <RecordingPlayer
+                  key={selectedRecording.path}
+                  videoPath={selectedRecording.path}
+                  dbPath={selectedRecording.dbPath}
+                  cwd={activeSession?.cwd ?? null}
+                  activeSessionId={activeSessionId}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full bg-black">
+                  <span className="text-muted-foreground/30 text-sm font-sans select-none">
+                    Chọn một recording để xem
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
-        )}
+
+          {/* Terminal panel */}
+          {terminalVisible ? (
+            <>
+              <div
+                className="h-1 bg-border hover:bg-primary/40 cursor-ns-resize transition-colors flex-shrink-0"
+                onMouseDown={handleDragStart}
+              />
+              <div className="flex items-center h-8 bg-card border-t border-border flex-shrink-0 px-2 gap-1">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-sans px-1">
+                  Terminal
+                </span>
+                <div
+                  className="flex items-center gap-0.5 flex-1 overflow-x-auto"
+                  style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                >
+                  {sessions.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setActiveSessionId(s.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-mono whitespace-nowrap max-w-[160px] transition-colors",
+                        s.id === activeSessionId
+                          ? "bg-accent text-accent-foreground"
+                          : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground",
+                        s.exited && "opacity-60"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                          s.exited ? "bg-destructive" : "bg-green-500"
+                        )}
+                      />
+                      <span className="truncate">{folderName(s.cwd)}</span>
+                      <span
+                        onClick={(e) => { e.stopPropagation(); closeSession(s.id); }}
+                        className="ml-0.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        ×
+                      </span>
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => createSession()}
+                    className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground text-sm leading-none"
+                  >
+                    +
+                  </button>
+                </div>
+                <button
+                  onClick={() => setTerminalVisible(false)}
+                  className="text-muted-foreground hover:text-foreground text-sm leading-none flex-shrink-0"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="relative flex-shrink-0" style={{ height: terminalHeight }}>
+                {sessions.map((s) => (
+                  <div key={s.id} className={cn("absolute inset-0", s.id !== activeSessionId && "hidden")}>
+                    <Terminal sessionId={s.id} visible={s.id === activeSessionId} />
+                    {s.exited && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                        <div className="text-center">
+                          <p className="text-muted-foreground mb-3">
+                            Process exited (code: {s.exitCode})
+                          </p>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => restartSession(s.id)}
+                          >
+                            Restart
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center h-7 bg-card border-t border-border px-3 flex-shrink-0">
+              <button
+                onClick={() => setTerminalVisible(true)}
+                className="text-[10px] text-muted-foreground uppercase tracking-widest hover:text-foreground font-sans transition-colors"
+              >
+                Terminal
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
