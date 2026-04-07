@@ -1,28 +1,20 @@
-import * as ChildProcess from "node:child_process";
-import * as Crypto from "node:crypto";
 import * as FS from "node:fs";
 import * as OS from "node:os";
 import * as Path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
-import { RotatingFileSink } from "@claude-desktop/shared/logging";
-import { Effect } from "effect";
-import { NetService, NetServiceLive } from "@claude-desktop/shared/Net";
+import { RotatingFileSink } from "./logging";
+import { spawnPty, writePty, resizePty, killPty, killAllPtys } from "./pty-manager";
 
-const BASE_DIR = Path.join(OS.homedir(), ".claude-desktop");
+const BASE_DIR = Path.join(OS.homedir(), ".e2e-code");
 const STATE_DIR = Path.join(BASE_DIR, "userdata");
 const LOG_DIR = Path.join(STATE_DIR, "logs");
-const DESKTOP_SCHEME = "claude-desktop";
+const DESKTOP_SCHEME = "e2e-code";
 const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL);
 
 let mainWindow: BrowserWindow | null = null;
-let backendProcess: ChildProcess.ChildProcess | null = null;
-let backendPort = 0;
-let backendAuthToken = "";
-let backendWsUrl = "";
 
 FS.mkdirSync(LOG_DIR, { recursive: true });
 const desktopLog = new RotatingFileSink({ dir: LOG_DIR, prefix: "desktop" });
-const backendLog = new RotatingFileSink({ dir: LOG_DIR, prefix: "backend" });
 
 function log(msg: string) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -30,50 +22,56 @@ function log(msg: string) {
   console.log(msg);
 }
 
-async function startBackend(): Promise<void> {
-  backendPort = await Effect.runPromise(
-    Effect.gen(function* () {
-      const net = yield* NetService;
-      return yield* net.findAvailablePort();
-    }).pipe(Effect.provide(NetServiceLive))
-  ).catch(() => 3100);
+function registerIpcHandlers(): void {
+  // PTY operations
+  ipcMain.handle("pty:create", (_event, sessionId: string, cwd: string, cliSessionId: string | null, isResume: boolean) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) return;
 
-  backendAuthToken = Crypto.randomBytes(32).toString("hex");
-  backendWsUrl = `ws://127.0.0.1:${backendPort}/ws?token=${backendAuthToken}`;
+    log(`Spawning PTY session=${sessionId} cwd=${cwd} resume=${isResume}`);
 
-  const serverEntry = isDevelopment
-    ? Path.resolve(__dirname, "../../server/src/bin.ts")
-    : Path.resolve(__dirname, "../../server/dist/bin.mjs");
-
-  log(`Starting backend on port ${backendPort}`);
-
-  backendProcess = ChildProcess.spawn(
-    process.execPath,
-    [serverEntry],
-    {
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: "1",
-        CLAUDE_DESKTOP_PORT: String(backendPort),
-        CLAUDE_DESKTOP_AUTH_TOKEN: backendAuthToken,
-        CLAUDE_DESKTOP_MODE: "desktop",
+    spawnPty(
+      sessionId,
+      cwd,
+      cliSessionId,
+      isResume,
+      (data) => {
+        const w = BrowserWindow.getAllWindows()[0];
+        if (w && !w.isDestroyed()) {
+          w.webContents.send("pty:data", sessionId, data);
+        }
       },
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-
-  backendProcess.stdout?.on("data", (chunk: Buffer) => {
-    backendLog.write(chunk.toString());
-  });
-  backendProcess.stderr?.on("data", (chunk: Buffer) => {
-    backendLog.write(chunk.toString());
-  });
-  backendProcess.on("exit", (code) => {
-    log(`Backend exited with code ${code}`);
+      (exitCode, signal) => {
+        log(`PTY exited session=${sessionId} code=${exitCode} signal=${signal}`);
+        const w = BrowserWindow.getAllWindows()[0];
+        if (w && !w.isDestroyed()) {
+          w.webContents.send("pty:exit", sessionId, exitCode, signal);
+        }
+      },
+    );
   });
 
-  // Wait for server to be ready
-  await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+  ipcMain.on("pty:write", (_event, sessionId: string, data: string) => {
+    writePty(sessionId, data);
+  });
+
+  ipcMain.on("pty:resize", (_event, sessionId: string, cols: number, rows: number) => {
+    resizePty(sessionId, cols, rows);
+  });
+
+  ipcMain.handle("pty:kill", (_event, sessionId: string) => {
+    killPty(sessionId);
+  });
+
+  // App operations
+  ipcMain.handle("app:pickFolder", async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, { properties: ["openDirectory"] });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle("app:openExternal", async (_event, url: string) => {
+    await shell.openExternal(url);
+  });
 }
 
 function createWindow(): void {
@@ -96,17 +94,6 @@ function createWindow(): void {
     },
   });
 
-  ipcMain.on("desktop:get-ws-url", (event) => {
-    event.returnValue = backendWsUrl;
-  });
-  ipcMain.handle("desktop:pick-folder", async () => {
-    const result = await dialog.showOpenDialog(mainWindow!, { properties: ["openDirectory"] });
-    return result.canceled ? null : result.filePaths[0] ?? null;
-  });
-  ipcMain.handle("desktop:open-external", async (_event, url: string) => {
-    await shell.openExternal(url);
-  });
-
   if (isDevelopment) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL!);
     mainWindow.webContents.openDevTools();
@@ -117,16 +104,17 @@ function createWindow(): void {
   mainWindow.on("closed", () => { mainWindow = null; });
 }
 
-app.whenReady().then(async () => {
-  await startBackend();
+app.whenReady().then(() => {
+  log("App ready, registering IPC handlers");
+  registerIpcHandlers();
   createWindow();
 });
 
 app.on("window-all-closed", () => {
-  backendProcess?.kill();
+  killAllPtys();
   app.quit();
 });
 
 app.on("before-quit", () => {
-  backendProcess?.kill();
+  killAllPtys();
 });

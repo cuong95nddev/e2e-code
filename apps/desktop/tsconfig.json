@@ -1,9 +1,16 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "ignoreDeprecations": "5.0",
     "outDir": "dist-electron",
     "rootDir": "src",
-    "types": ["node"]
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": false
   },
   "include": ["src"]
 }

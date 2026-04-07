@@ -1,164 +1,19 @@
 @import "tailwindcss";
-@import "@xterm/xterm/css/xterm.css";
 
-@custom-variant dark (&:is(.dark, .dark *));
-
-@theme inline {
-  --animate-skeleton: skeleton 2s -1s infinite linear;
-  --color-warning-foreground: var(--warning-foreground);
-  --color-warning: var(--warning);
-  --color-success-foreground: var(--success-foreground);
-  --color-success: var(--success);
-  --color-info-foreground: var(--info-foreground);
-  --color-info: var(--info);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
-  --color-background: var(--background);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-  --radius-4xl: calc(var(--radius) + 16px);
-  @keyframes skeleton {
-    to {
-      background-position: -200% 0;
-    }
-  }
-}
-
-/* t3 base layer — needed for t3 UI components to render correctly.
-   Applies default border-color and outline to all elements,
-   and sets body background/text from design tokens. */
-@layer base {
-  *,
-  ::after,
-  ::before {
-    border-color: var(--border);
-  }
-  body {
-    background-color: var(--background);
-    color: var(--foreground);
-  }
-}
-
-/* Dark-only: set dark mode tokens directly on :root */
-:root {
-  color-scheme: dark;
-  --radius: 0.625rem;
-  --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
-  --foreground: var(--color-neutral-100);
-  --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
-  --card-foreground: var(--color-neutral-100);
-  --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
-  --popover-foreground: var(--color-neutral-100);
-  --primary: oklch(0.588 0.217 264);
-  --primary-foreground: var(--color-white);
-  --secondary: --alpha(var(--color-white) / 4%);
-  --secondary-foreground: var(--color-neutral-100);
-  --muted: --alpha(var(--color-white) / 4%);
-  --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-  --accent: --alpha(var(--color-white) / 4%);
-  --accent-foreground: var(--color-neutral-100);
-  --destructive: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
-  --border: --alpha(var(--color-white) / 6%);
-  --input: --alpha(var(--color-white) / 8%);
-  --ring: oklch(0.588 0.217 264);
-  --destructive-foreground: var(--color-red-400);
-  --info: var(--color-blue-500);
-  --info-foreground: var(--color-blue-400);
-  --success: var(--color-emerald-500);
-  --success-foreground: var(--color-emerald-400);
-  --warning: var(--color-amber-500);
-  --warning-foreground: var(--color-amber-400);
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  width: 100%;
-  max-width: 100%;
+* {
   margin: 0;
   padding: 0;
-  overflow-y: hidden;
-  overflow-x: hidden;
-  overflow-x: clip;
-  overscroll-behavior-y: none;
+  box-sizing: border-box;
 }
 
 body {
-  font-family:
-    "DM Sans",
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    system-ui,
-    sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  overflow: hidden;
 }
 
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
-}
-
-pre,
-code,
-textarea,
-input {
-  font-family: "SF Mono", "SFMono-Regular", "Fira Code", "Cascadia Code", Consolas, "Liberation Mono", Menlo, monospace;
-}
-
-/* Window drag region (frameless titlebar) */
-.drag-region {
-  -webkit-app-region: drag;
-}
-
-.drag-region button,
-.drag-region input,
-.drag-region textarea,
-.drag-region select,
-.drag-region a {
-  -webkit-app-region: no-drag;
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+/* xterm container fills available space */
+.xterm {
+  height: 100%;
 }

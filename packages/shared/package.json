@@ -1,5 +1,5 @@
 {
-  "name": "@claude-desktop/shared",
+  "name": "@e2e-code/shared",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -21,7 +21,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@claude-desktop/contracts": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

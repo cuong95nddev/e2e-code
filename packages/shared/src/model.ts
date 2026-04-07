@@ -1,4 +1,4 @@
-import type { ModelId } from "@claude-desktop/contracts";
+export type ModelId = "claude-sonnet-4-6" | "claude-opus-4-6" | "claude-haiku-4-5-20251001";
 
 export interface ModelInfo {
   readonly id: ModelId;

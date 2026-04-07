@@ -2,12 +2,8 @@
   "$schema": "https://turbo.build/schema.json",
   "globalEnv": [
     "PORT",
-    "VITE_WS_URL",
     "VITE_DEV_SERVER_URL",
-    "ELECTRON_RENDERER_PORT",
-    "CLAUDE_DESKTOP_PORT",
-    "CLAUDE_DESKTOP_AUTH_TOKEN",
-    "CLAUDE_DESKTOP_MODE"
+    "ELECTRON_RENDERER_PORT"
   ],
   "tasks": {
     "build": {
@@ -15,7 +11,6 @@
       "outputs": ["dist/**", "dist-electron/**"]
     },
     "dev": {
-      "dependsOn": ["@claude-desktop/contracts#build"],
       "cache": false,
       "persistent": true
     },

@@ -1,5 +1,5 @@
 {
-  "name": "@claude-desktop/desktop",
+  "name": "@e2e-code/desktop",
   "version": "0.0.1",
   "private": true,
   "main": "dist-electron/main.js",
