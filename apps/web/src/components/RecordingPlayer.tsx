@@ -14,6 +14,11 @@ const TYPE_COLOR: Record<string, string> = {
   keydown:   "#3fb950",
   keyup:     "#238636",
   wheel:     "#8b949e",
+  // chrome event types
+  click:      "#388bfd",
+  input:      "#3fb950",
+  navigation: "#e3b341",
+  scroll:     "#8b949e",
 };
 
 function formatMs(ms: number): string {
@@ -26,13 +31,32 @@ function formatMs(ms: number): string {
 
 function formatType(type: string): string {
   const map: Record<string, string> = {
-    mousedown: "click ↓",
-    mouseup:   "click ↑",
-    keydown:   "key ↓",
-    keyup:     "key ↑",
-    wheel:     "scroll",
+    mousedown:  "click ↓",
+    mouseup:    "click ↑",
+    keydown:    "key ↓",
+    keyup:      "key ↑",
+    wheel:      "scroll",
+    click:      "click",
+    input:      "input",
+    navigation: "nav",
+    scroll:     "scroll",
   };
   return map[type] ?? type;
+}
+
+function describeChromeEvent(e: ChromeEvent): string {
+  if (e.type === "navigation") return `→ ${e.nav_to ?? e.url ?? ""}`;
+  if (e.type === "keydown" && e.key_combo) return e.key_combo;
+  if (e.type === "input" && e.input_value != null) {
+    const label = e.el_aria_label ?? e.el_placeholder ?? e.el_tag ?? "input";
+    return `"${e.input_value}" → ${label}`;
+  }
+  if (e.type === "click") {
+    const label = e.el_text ?? e.el_aria_label ?? e.el_testid ?? e.el_id ?? e.el_tag ?? "element";
+    const selector = e.el_testid ? `[data-testid="${e.el_testid}"]` : (e.el_id ? `#${e.el_id}` : (e.el_selector ?? ""));
+    return `${label}${selector ? `  ${selector}` : ""}`;
+  }
+  return e.type;
 }
 
 function describeEvent(e: ActionEvent): string {
@@ -91,19 +115,7 @@ function getRichLabel(ev: ActionEvent, chromeEvents: ChromeEvent[]): string {
   // Find chrome event within ±100ms
   const ce = chromeEvents.find((c) => Math.abs(c.ts_ms - ev.ts_ms) <= 100);
   if (!ce) return describeEvent(ev);
-
-  if (ce.type === "navigation") return `→ ${ce.nav_to ?? ce.url ?? ""}`;
-  if (ce.type === "keydown" && ce.key_combo) return ce.key_combo;
-  if (ce.type === "input" && ce.input_value != null) {
-    const label = ce.el_aria_label ?? ce.el_placeholder ?? ce.el_tag ?? "input";
-    return `"${ce.input_value}" → ${label}`;
-  }
-  if (ce.type === "click") {
-    const label = ce.el_text ?? ce.el_aria_label ?? ce.el_testid ?? ce.el_id ?? ce.el_tag ?? "element";
-    const selector = ce.el_testid ? `[data-testid="${ce.el_testid}"]` : (ce.el_id ? `#${ce.el_id}` : (ce.el_selector ?? ""));
-    return `${label}${selector ? `  ${selector}` : ""}`;
-  }
-  return describeEvent(ev);
+  return describeChromeEvent(ce);
 }
 
 export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Props) {
@@ -174,75 +186,133 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
     videoRef.current.currentTime = ms / 1000;
   }, []);
 
+  // Use chrome events as primary list when no desktop actions were captured
+  const useChrome = events.length === 0 && chromeEvents.length > 0;
+  const displayEvents = useChrome ? chromeEvents : events;
+
   const handleAnalyze = useCallback(async () => {
     if (!cwd || !activeSessionId || !videoRef.current || !canvasRef.current) return;
     setAnalyzing(true);
     try {
-      const keyEvents = filterKeyEvents(events);
       const framesDir = `${cwd}/recordings/${stem}/frames`;
 
-      const rows: string[] = [];
-      for (let i = 0; i < keyEvents.length; i++) {
-        const ev = keyEvents[i]!;
-        const framePath = `${framesDir}/frame-${ev.ts_ms}.jpg`;
-        const buffer = await extractFrame(videoRef.current, canvasRef.current, ev.ts_ms);
-        await window.electronAPI.recorder.saveFrame(framePath, buffer);
+      // --- Frames table ---
+      type FrameRow = { relPath: string; time: string };
+      const frameRows: FrameRow[] = [];
+      const seenFrames = new Set<string>();
 
-        const relFrame = `recordings/${stem}/frames/frame-${ev.ts_ms}.jpg`;
-        // Try to enrich with chrome event context
-        const ce = chromeEvents.find((c) => Math.abs(c.ts_ms - ev.ts_ms) <= 100);
-        let detail: string;
-        if (ce) {
-          if (ce.type === "navigation") {
-            detail = `navigation → ${ce.nav_to ?? ce.url ?? ""}`;
-          } else if (ce.type === "keydown" && ce.key_combo) {
-            detail = `key ${ce.key_combo}`;
-          } else if (ce.type === "input" && ce.input_value != null) {
-            const label = ce.el_aria_label ?? ce.el_placeholder ?? ce.el_tag ?? "input";
-            detail = `typed "${ce.input_value}" in ${label} [${ce.el_selector ?? ""}]`;
-          } else {
-            const label = ce.el_text ?? ce.el_aria_label ?? ce.el_testid ?? ce.el_id ?? ce.el_tag ?? "element";
-            const selector = ce.el_testid ? `[data-testid="${ce.el_testid}"]` : (ce.el_id ? `#${ce.el_id}` : (ce.el_selector ?? ""));
-            detail = `${label}${selector ? ` [${selector}]` : ""}`;
-          }
-        } else {
-          detail = describeEvent(ev);
+      // --- Action event rows ---
+      type EventRow = { num: number; time: string; frame: string; cols: string[] };
+      const eventRows: EventRow[] = [];
+
+      const saveFrameFor = async (ts_ms: number): Promise<string> => {
+        const framePath = `${framesDir}/frame-${ts_ms}.jpg`;
+        const relPath = `recordings/${stem}/frames/frame-${ts_ms}.jpg`;
+        if (!seenFrames.has(relPath)) {
+          const buffer = await extractFrame(videoRef.current!, canvasRef.current!, ts_ms);
+          await window.electronAPI.recorder.saveFrame(framePath, buffer);
+          seenFrames.add(relPath);
+          frameRows.push({ relPath, time: formatMs(ts_ms) });
         }
-        rows.push(`| ${i + 1} | ${formatMs(ev.ts_ms)} | ${ev.type} | ${detail} | ${relFrame} |`);
+        return relPath;
+      };
+
+      const cell = (v: string | number | null | undefined) =>
+        v == null || v === "" ? "" : String(v).replace(/\|/g, "\\|").replace(/\n/g, " ");
+
+      if (useChrome) {
+        for (let i = 0; i < chromeEvents.length; i++) {
+          const ce = chromeEvents[i]!;
+          const frame = await saveFrameFor(ce.ts_ms);
+          eventRows.push({
+            num: i + 1,
+            time: formatMs(ce.ts_ms),
+            frame,
+            cols: [
+              cell(ce.type),
+              cell(ce.url),
+              cell(ce.page_title),
+              cell(ce.el_tag),
+              cell(ce.el_id),
+              cell(ce.el_text),
+              cell(ce.el_aria_label),
+              cell(ce.el_role),
+              cell(ce.el_placeholder),
+              cell(ce.el_testid),
+              cell(ce.el_selector),
+              cell(ce.input_value),
+              ce.x != null ? `(${ce.x},${ce.y})` : "",
+            ],
+          });
+        }
+      } else {
+        const keyEvents = filterKeyEvents(events);
+        for (let i = 0; i < keyEvents.length; i++) {
+          const ev = keyEvents[i]!;
+          const frame = await saveFrameFor(ev.ts_ms);
+          eventRows.push({
+            num: i + 1,
+            time: formatMs(ev.ts_ms),
+            frame,
+            cols: [
+              cell(ev.type),
+              ev.x != null ? `(${ev.x},${ev.y})` : "",
+              cell(ev.button),
+              cell(ev.keycode),
+              cell(ev.key_char),
+              cell(ev.modifiers),
+              ev.delta_y != null ? `${ev.delta_x},${ev.delta_y}` : "",
+            ],
+          });
+        }
       }
 
-      const promptPath = `${cwd}/recordings/${stem}/analyze.md`;
+      // Build markdown
+      const frameHeader = `| Frame | Time |`;
+      const frameSep = `|-------|------|`;
+      const frameTableRows = frameRows.map((r) => `| ${r.relPath} | ${r.time} |`);
+
+      const eventCols = useChrome
+        ? ["Type", "URL", "Page Title", "Tag", "ID", "Text", "Aria Label", "Role", "Placeholder", "Test ID", "Selector", "Input Value", "Position"]
+        : ["Type", "Position", "Button", "Keycode", "Key", "Modifiers", "Delta"];
+      const eventHeader = `| # | Time | Frame | ${eventCols.join(" | ")} |`;
+      const eventSep = `|---|------|-------|${eventCols.map(() => "------").join("|")}|`;
+      const eventTableRows = eventRows.map(
+        (r) => `| ${r.num} | ${r.time} | ${r.frame} | ${r.cols.join(" | ")} |`
+      );
+
       const content = [
         `# Recording Analysis Task`,
         ``,
         `## Your job`,
         `Invoke the /analyze-recording skill to analyze this recording.`,
         ``,
-        `## Frames directory`,
-        `recordings/${stem}/frames/`,
+        `## Frames`,
+        frameHeader,
+        frameSep,
+        ...frameTableRows,
         ``,
         `## Action Events`,
-        `| # | Time | Type | Detail | Frame |`,
-        `|---|------|------|--------|-------|`,
-        ...rows,
+        eventHeader,
+        eventSep,
+        ...eventTableRows,
       ].join("\n");
 
+      const promptPath = `${cwd}/recordings/${stem}/analyze.md`;
       await window.electronAPI.recorder.writeFile(promptPath, content);
-
-      const relPrompt = `recordings/${stem}/analyze.md`;
-      window.electronAPI.pty.write(activeSessionId, `/analyze-recording ${relPrompt}\n`);
+      window.electronAPI.pty.write(activeSessionId, `/analyze-recording recordings/${stem}/analyze.md\n`);
     } finally {
       setAnalyzing(false);
     }
-  }, [cwd, activeSessionId, events, chromeEvents, stem]);
+  }, [cwd, activeSessionId, events, chromeEvents, useChrome, stem]);
 
   useEffect(() => {
-    if (!listRef.current || events.length === 0) return;
-    const idx = events.findIndex((e) => e.ts_ms > currentMs) - 1;
+    if (!listRef.current || displayEvents.length === 0) return;
+    const idx = displayEvents.findIndex((e) => e.ts_ms > currentMs) - 1;
     if (idx < 0) return;
     const el = listRef.current.children[idx] as HTMLElement | undefined;
     el?.scrollIntoView({ block: "nearest" });
-  }, [currentMs, events]);
+  }, [currentMs, displayEvents]);
 
   return (
     <div className="flex h-full font-sans bg-[#0d1117] overflow-hidden">
@@ -258,7 +328,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
             onLoadedMetadata={handleMetadata}
             onTimeUpdate={handleTimeUpdate}
           />
-          {events.length > 0 && (
+          {displayEvents.length > 0 && (
             <div className="flex items-center justify-end gap-2 px-3 py-1.5">
               <button
                 onClick={handleAnalyze}
@@ -298,7 +368,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                 style={{ left: `${(currentMs / duration) * 100}%` }}
               />
               {/* Event markers */}
-              {events.map((ev) => (
+              {displayEvents.map((ev) => (
                 <div
                   key={ev.id}
                   className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
@@ -327,17 +397,17 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
           ref={listRef}
           className="flex-1 overflow-y-auto px-4 py-2 min-h-0"
         >
-          {events.length === 0 && (
+          {displayEvents.length === 0 && (
             <div className="text-xs text-[#6e7681] text-center py-4">
               {dbPath ? "No actions captured" : "No action data for this recording"}
             </div>
           )}
-          {events.map((ev, i) => (
+          {displayEvents.map((ev, i) => (
             <button
               key={ev.id}
               onClick={() => seekTo(ev.ts_ms)}
               className={`w-full flex items-center gap-3 px-2 py-1 rounded text-left hover:bg-[#161b22] transition-colors ${
-                ev.ts_ms <= currentMs && (events[i + 1]?.ts_ms ?? Infinity) > currentMs
+                ev.ts_ms <= currentMs && (displayEvents[i + 1]?.ts_ms ?? Infinity) > currentMs
                   ? "bg-[#161b22]"
                   : ""
               }`}
@@ -351,7 +421,9 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
               >
                 {formatType(ev.type)}
               </span>
-              <span className="text-[10px] text-[#6e7681] truncate">{getRichLabel(ev, chromeEvents)}</span>
+              <span className="text-[10px] text-[#6e7681] truncate">
+                {useChrome ? describeChromeEvent(ev as ChromeEvent) : getRichLabel(ev as ActionEvent, chromeEvents)}
+              </span>
             </button>
           ))}
         </div>
