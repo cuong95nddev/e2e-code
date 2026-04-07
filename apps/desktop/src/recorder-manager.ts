@@ -170,6 +170,20 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
     return filePath;
   });
 
+  // --- saveFrame ---
+  ipcMain.handle("recorder:saveFrame", async (_event, framePath: string, buffer: ArrayBuffer) => {
+    if (!framePath || !Path.isAbsolute(framePath)) throw new Error(`Invalid framePath: ${framePath}`);
+    await FS.promises.mkdir(Path.dirname(framePath), { recursive: true });
+    await FS.promises.writeFile(framePath, Buffer.from(buffer));
+  });
+
+  // --- writeFile ---
+  ipcMain.handle("recorder:writeFile", async (_event, filePath: string, content: string) => {
+    if (!filePath || !Path.isAbsolute(filePath)) throw new Error(`Invalid filePath: ${filePath}`);
+    await FS.promises.mkdir(Path.dirname(filePath), { recursive: true });
+    await FS.promises.writeFile(filePath, content, "utf8");
+  });
+
   // --- openOverlay ---
   ipcMain.handle("recorder:openOverlay", (_event, screenSourceId: string) => {
     const displays = screen.getAllDisplays();
