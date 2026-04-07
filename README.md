@@ -6,10 +6,11 @@ A desktop app that helps you write and execute E2E tests more easily with AI age
 
 ```
 apps/
-  desktop/     Electron shell — spawns Claude Code CLI via node-pty, loads web UI
-  web/         React frontend — xterm.js terminal, Tailwind CSS
+  desktop/          Electron shell — spawns Claude Code CLI via node-pty, loads web UI
+  web/              React frontend — xterm.js terminal, Tailwind CSS
+  chrome-extension/ Chrome MV3 extension — records browser actions with DOM context
 packages/
-  shared/      Logging utilities
+  shared/           Logging utilities
 ```
 
 **Data flow:**
@@ -47,10 +48,22 @@ bun run dev
 ## Scripts
 
 ```bash
-bun run dev          # Start desktop app in dev mode
-bun run build        # Build all packages
-bun run typecheck    # Type-check all packages
+bun run dev                  # Start desktop app in dev mode
+bun run build                # Build all packages
+bun run typecheck            # Type-check all packages
+bun run build:extension      # Build the Chrome extension → apps/chrome-extension/dist/
 ```
+
+## Chrome Extension
+
+Captures DOM events (click, input, keydown, scroll, navigation) with full element context — selector, XPath, text, aria-label — and records tab video. Sends everything to the Electron app over a local HTTP server (port 7878), enriching AI analysis with precise element information instead of just screen coordinates.
+
+### Loading into Chrome
+
+1. `bun run build:extension`
+2. Open `chrome://extensions` → enable **Developer mode**
+3. Click **Load unpacked** → select `apps/chrome-extension/dist/`
+4. Start the app (`bun run dev`), then click the **e2e-code Recorder** icon to record
 
 ## License
 

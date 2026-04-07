@@ -259,8 +259,21 @@ export function stopChromeBridge(): void {
 export function queryChromeEvents(dbPath: string, fromMs: number, toMs: number): unknown[] {
   try {
     const db = new Database(dbPath, { readonly: true });
+    // GROUP BY deduplicates events fired by the same user action across multiple frames
     const rows = db
-      .prepare("SELECT * FROM chrome_events WHERE ts_ms >= ? AND ts_ms <= ? ORDER BY ts_ms")
+      .prepare(`
+        SELECT MIN(id) as id, type, ts_ms, x, y, url, page_title,
+               el_tag, el_id, el_text, el_aria_label, el_role, el_placeholder,
+               el_testid, el_selector, el_xpath, el_classes, el_bbox,
+               input_value, key_combo, scroll_dir, nav_from, nav_to
+        FROM chrome_events
+        WHERE ts_ms >= ? AND ts_ms <= ?
+        GROUP BY type, ts_ms,
+                 COALESCE(x, -1), COALESCE(y, -1),
+                 COALESCE(el_testid, ''), COALESCE(el_selector, ''),
+                 COALESCE(nav_to, '')
+        ORDER BY ts_ms
+      `)
       .all(fromMs, toMs);
     db.close();
     return rows;

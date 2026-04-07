@@ -75,6 +75,12 @@ export function App() {
     window.electronAPI.pty.create(id, session.cwd, null, false);
   }, [sessions]);
 
+  // Keep chrome-bridge cwd in sync with active session so recordings land in the right folder
+  useEffect(() => {
+    const cwd = sessions.find((s) => s.id === activeSessionId)?.cwd;
+    if (cwd) window.electronAPI.chrome.setActiveCwd(cwd);
+  }, [activeSessionId, sessions]);
+
   // Listen for file list changes (e.g. new recording saved by chrome extension)
   useEffect(() => {
     const off = window.electronAPI.recorder.onFileListChanged(() => {

@@ -21,7 +21,8 @@
     "dev": "turbo run dev --filter=@e2e-code/web --filter=@e2e-code/desktop",
     "dev:desktop": "turbo run dev --filter=@e2e-code/desktop",
     "build": "turbo run build",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "build:extension": "cd apps/chrome-extension && node build.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",
