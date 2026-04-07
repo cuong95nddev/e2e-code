@@ -47,6 +47,8 @@ export interface ElectronAPI {
     sessionStart(cwd: string): Promise<{ dbPath: string | null; stem: string; startTime: number; captureActive: boolean }>;
     sessionStop(): Promise<void>;
     queryActions(dbPath: string, fromMs: number, toMs: number): Promise<ActionEvent[]>;
+    saveFrame(framePath: string, buffer: ArrayBuffer): Promise<void>;
+    writeFile(filePath: string, content: string): Promise<void>;
   };
 }
 
@@ -91,6 +93,10 @@ const api: ElectronAPI = {
     sessionStop: () => ipcRenderer.invoke("recorder:sessionStop"),
     queryActions: (dbPath: string, fromMs: number, toMs: number) =>
       ipcRenderer.invoke("actions:query", dbPath, fromMs, toMs),
+    saveFrame: (framePath: string, buffer: ArrayBuffer) =>
+      ipcRenderer.invoke("recorder:saveFrame", framePath, buffer),
+    writeFile: (filePath: string, content: string) =>
+      ipcRenderer.invoke("recorder:writeFile", filePath, content),
   },
 };
 
