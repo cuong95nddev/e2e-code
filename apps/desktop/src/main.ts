@@ -7,6 +7,7 @@ import { RotatingFileSink } from "./logging";
 import { spawnPty, writePty, resizePty, killPty, killAllPtys } from "./pty-manager";
 import { registerRecorderHandlers } from "./recorder-manager";
 import { registerActionCaptureHandlers } from "./action-capture";
+import { startChromeBridge, stopChromeBridge, setActiveCwd } from "./chrome-bridge";
 
 protocol.registerSchemesAsPrivileged([
   { scheme: "recording", privileges: { secure: true, supportFetchAPI: true, stream: true } },
@@ -123,6 +124,13 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   registerRecorderHandlers(() => mainWindow);
   registerActionCaptureHandlers();
+  startChromeBridge(() => mainWindow);
+
+  // Allow renderer to set the active project cwd for chrome recordings
+  ipcMain.handle("chrome:setActiveCwd", (_event, cwd: string) => {
+    setActiveCwd(cwd);
+  });
+
   createWindow();
 });
 
@@ -137,4 +145,5 @@ app.on("will-quit", () => {
 
 app.on("before-quit", () => {
   killAllPtys();
+  stopChromeBridge();
 });

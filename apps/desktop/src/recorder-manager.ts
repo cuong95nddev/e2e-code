@@ -3,6 +3,7 @@ import * as Path from "node:path";
 import * as zlib from "node:zlib";
 import { ipcMain, desktopCapturer, globalShortcut, BrowserWindow, screen, Tray, nativeImage, Menu } from "electron";
 import { startCapture, stopCapture } from "./action-capture";
+import { queryChromeEvents } from "./chrome-bridge";
 
 const OVERLAY_HTML = `<!DOCTYPE html>
 <html>
@@ -254,6 +255,12 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
 
   ipcMain.on("recorder:hideTray", () => {
     if (recordingTray) { recordingTray.destroy(); recordingTray = null; }
+  });
+
+  // --- queryChrome ---
+  ipcMain.handle("recorder:queryChrome", (_event, dbPath: string, fromMs: number, toMs: number) => {
+    if (!dbPath || !Path.isAbsolute(dbPath)) return [];
+    return queryChromeEvents(dbPath, fromMs, toMs);
   });
 
   // --- global shortcut ⌘⇧5 ---
