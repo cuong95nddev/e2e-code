@@ -13,6 +13,12 @@ export interface ElectronAPI {
     pickFolder(): Promise<string | null>;
     openExternal(url: string): Promise<void>;
   };
+  recorder: {
+    getSources(): Promise<{ id: string; name: string; thumbnail: string }[]>;
+    openOverlay(screenSourceId: string): Promise<{ x: number; y: number; width: number; height: number } | null>;
+    saveFile(cwd: string, buffer: ArrayBuffer): Promise<string>;
+    onTogglePicker(callback: () => void): () => void;
+  };
 }
 
 function onChannel(channel: string, callback: (...args: unknown[]) => void): () => void {
@@ -41,6 +47,12 @@ const api: ElectronAPI = {
   app: {
     pickFolder: () => ipcRenderer.invoke("app:pickFolder"),
     openExternal: (url: string) => ipcRenderer.invoke("app:openExternal", url),
+  },
+  recorder: {
+    getSources: () => ipcRenderer.invoke("recorder:getSources"),
+    openOverlay: (screenSourceId: string) => ipcRenderer.invoke("recorder:openOverlay", screenSourceId),
+    saveFile: (cwd: string, buffer: ArrayBuffer) => ipcRenderer.invoke("recorder:saveFile", cwd, buffer),
+    onTogglePicker: (callback: () => void) => onChannel("recorder:togglePicker", callback),
   },
 };
 

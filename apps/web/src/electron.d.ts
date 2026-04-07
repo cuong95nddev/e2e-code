@@ -1,3 +1,9 @@
+interface RecorderSource {
+  id: string;
+  name: string;
+  thumbnail: string; // base64 data URL
+}
+
 interface ElectronAPI {
   pty: {
     create(sessionId: string, cwd: string, cliSessionId: string | null, isResume: boolean): Promise<void>;
@@ -10,6 +16,12 @@ interface ElectronAPI {
   app: {
     pickFolder(): Promise<string | null>;
     openExternal(url: string): Promise<void>;
+  };
+  recorder: {
+    getSources(): Promise<RecorderSource[]>;
+    openOverlay(screenSourceId: string): Promise<{ x: number; y: number; width: number; height: number } | null>;
+    saveFile(cwd: string, buffer: ArrayBuffer): Promise<string>;
+    onTogglePicker(callback: () => void): () => void;
   };
 }
 
