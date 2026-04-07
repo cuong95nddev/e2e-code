@@ -60,9 +60,11 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
   // --- saveFile ---
   ipcMain.handle("recorder:saveFile", async (_event, cwd: string, buffer: ArrayBuffer) => {
     if (!cwd || !Path.isAbsolute(cwd)) throw new Error(`Invalid cwd: ${cwd}`);
+    const MAX_SIZE = 200 * 1024 * 1024; // 200 MB
+    if (buffer.byteLength > MAX_SIZE) throw new Error(`Recording too large: ${buffer.byteLength} bytes (max 200 MB)`);
     const dir = Path.join(cwd, "recordings");
     await FS.promises.mkdir(dir, { recursive: true });
-    const ts = new Date().toISOString().slice(0, 23).replace(/[:.]/g, "-");
+    const ts = new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-");
     const filePath = Path.join(dir, `${ts}.webm`);
     await FS.promises.writeFile(filePath, Buffer.from(buffer));
     return filePath;
@@ -95,6 +97,7 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
 
       const dataUri = `data:text/html;charset=utf-8,${encodeURIComponent(OVERLAY_HTML)}`;
       overlayWin.loadURL(dataUri);
+      overlayWin.webContents.on("did-fail-load", () => settle(null));
 
       const settle = (val: { x: number; y: number; width: number; height: number } | null) => {
         if (settled) return;

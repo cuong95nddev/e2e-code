@@ -81,7 +81,7 @@ export function useRecorder() {
 
   const stopRecording = useCallback(async (): Promise<string> => {
     const recorder = mediaRecorderRef.current;
-    if (!recorder) return "";
+    if (!recorder || recorderState !== "recording") return "";
 
     return new Promise((resolve, reject) => {
       recorder.onstop = async () => {
@@ -104,7 +104,7 @@ export function useRecorder() {
       recorder.stop();
       mediaRecorderRef.current = null;
     });
-  }, []);
+  }, [recorderState]);
 
   return { recorderState, elapsed, savedPath, startRecording, stopRecording };
 }
