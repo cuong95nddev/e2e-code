@@ -22,6 +22,32 @@ export interface ActionEvent {
   delta_y: number | null;
 }
 
+export interface ChromeEvent {
+  id: number;
+  type: string;
+  ts_ms: number;
+  x: number | null;
+  y: number | null;
+  url: string | null;
+  page_title: string | null;
+  el_tag: string | null;
+  el_id: string | null;
+  el_text: string | null;
+  el_aria_label: string | null;
+  el_role: string | null;
+  el_placeholder: string | null;
+  el_testid: string | null;
+  el_selector: string | null;
+  el_xpath: string | null;
+  el_classes: string | null;   // JSON array string
+  el_bbox: string | null;      // JSON {x,y,width,height} string
+  input_value: string | null;
+  key_combo: string | null;
+  scroll_dir: string | null;
+  nav_from: string | null;
+  nav_to: string | null;
+}
+
 export interface ElectronAPI {
   pty: {
     create(sessionId: string, cwd: string, cliSessionId: string | null, isResume: boolean): Promise<void>;
@@ -49,6 +75,11 @@ export interface ElectronAPI {
     queryActions(dbPath: string, fromMs: number, toMs: number): Promise<ActionEvent[]>;
     saveFrame(framePath: string, buffer: ArrayBuffer): Promise<void>;
     writeFile(filePath: string, content: string): Promise<void>;
+    queryChrome(dbPath: string, fromMs: number, toMs: number): Promise<ChromeEvent[]>;
+    onFileListChanged(callback: () => void): () => void;
+  };
+  chrome: {
+    setActiveCwd(cwd: string): Promise<void>;
   };
 }
 
@@ -97,6 +128,13 @@ const api: ElectronAPI = {
       ipcRenderer.invoke("recorder:saveFrame", framePath, buffer),
     writeFile: (filePath: string, content: string) =>
       ipcRenderer.invoke("recorder:writeFile", filePath, content),
+    queryChrome: (dbPath: string, fromMs: number, toMs: number) =>
+      ipcRenderer.invoke("recorder:queryChrome", dbPath, fromMs, toMs),
+    onFileListChanged: (callback: () => void) =>
+      onChannel("recorder:fileListChanged", callback),
+  },
+  chrome: {
+    setActiveCwd: (cwd: string) => ipcRenderer.invoke("chrome:setActiveCwd", cwd),
   },
 };
 
