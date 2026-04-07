@@ -4,17 +4,20 @@
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
-    "postinstall": "electron-rebuild -f -w node-pty",
-    "dev": "tsc && ELECTRON_RUN_AS_NODE= electron .",
+    "postinstall": "electron-rebuild -f -w node-pty,uiohook-napi,better-sqlite3",
+    "dev": "tsc && VITE_DEV_SERVER_URL=http://localhost:5733 electron .",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "better-sqlite3": "^12.8.0",
     "electron": "41.1.1",
-    "node-pty": "^1.1.0"
+    "node-pty": "^1.1.0",
+    "uiohook-napi": "^1.5.3"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   },
