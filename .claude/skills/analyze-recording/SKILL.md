@@ -20,12 +20,15 @@ Use the image to understand what was visible on screen at the moment of the acti
 
 Output a numbered list of human-readable steps. Rules:
 - Each step starts with a verb: "Clicked", "Typed", "Scrolled", "Right-clicked"
+- **Always include specific identifiers visible in the frame**: patient IDs, patient names, row text, form titles, table cell values, modal titles, URLs, record numbers — whatever text uniquely identifies what was acted on. Never write "a patient row" when you can read "Patient ID: 05-001" from the frame; write "the row for Patient 05-001" instead.
+- **For tables and lists**: read the actual row content (ID, name, status, date) from the frame and include it. Example: "Clicked the 'TEST - LANTERN Study' row" not "Clicked a row in the study list".
+- **For form fields and modals**: include the form name, field label, and any visible value. Example: "Clicked 'Reproductive System Findings Form' in the left nav panel" not "Clicked a form item".
 - Identify the UI element being interacted with from the frame (button label, input field name, menu item, etc.)
 - Group sequential keydown events where each event is within 2 seconds of the previous one into a single "Typed X" step. The typed text is the concatenation of all key_char values in the group.
 - For keyboard shortcuts (Cmd+, Ctrl+, Alt+ combinations), use the format "Pressed Cmd+S" instead of "Typed"
 - For mouse clicks, describe the element and its location (e.g. "the Save button in the top toolbar")
 - For scrolls, describe the direction and the content area being scrolled
-- Keep each step to one sentence
+- Keep each step to one sentence but do NOT sacrifice specificity for brevity — include the identifier even if the sentence is slightly longer
 
 ## Output format
 
@@ -40,3 +43,9 @@ Output a numbered list of human-readable steps. Rules:
 
 After the breakdown, add a blank line and ask:
 > "Would you like me to generate a Playwright test script from these steps?"
+
+## Step 4: Save the result
+
+Derive the output path from the input file path by replacing `analyze.md` with `result.md`.
+
+Use the Write tool to write the complete Step-by-Step Breakdown to that path. Write only the breakdown section — starting from `## Step-by-Step Breakdown` — not the question at the end.

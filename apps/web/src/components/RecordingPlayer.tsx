@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from "react";
+import { AnalysisPanel } from "./AnalysisPanel";
 
 interface Props {
   videoPath: string;
@@ -115,6 +116,44 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [analyzing, setAnalyzing] = useState(false);
 
+  // Analysis panel state
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelWidth, setPanelWidth] = useState(360);
+  const [resultContent, setResultContent] = useState<string | null>(null);
+  const [frames, setFrames] = useState<{ path: string; ts_ms: number }[]>([]);
+
+  const stem = videoPath.split("/").pop()?.replace(".webm", "") ?? "recording";
+  const stemDir = cwd ? `${cwd}/recordings/${stem}` : null;
+  const resultPath = stemDir ? `${stemDir}/result.md` : null;
+  const framesDir = stemDir ? `${stemDir}/frames` : null;
+
+  const loadResult = useCallback(async () => {
+    if (!resultPath || !framesDir) return;
+    const [content, frameList] = await Promise.all([
+      window.electronAPI.recorder.readFile(resultPath),
+      window.electronAPI.recorder.listFrames(framesDir),
+    ]);
+    if (content) {
+      setResultContent(content);
+      setFrames(frameList);
+      setPanelOpen(true);
+    }
+  }, [resultPath, framesDir]);
+
+  // On mount: check if result already exists, then start watching
+  useEffect(() => {
+    if (!stemDir) return;
+    loadResult();
+    window.electronAPI.recorder.watchResult(stemDir);
+    const off = window.electronAPI.recorder.onAnalysisReady(() => {
+      loadResult();
+    });
+    return () => {
+      off();
+      window.electronAPI.recorder.unwatchResult(stemDir);
+    };
+  }, [stemDir, loadResult]);
+
   const handleMetadata = useCallback(async () => {
     const d = videoRef.current?.duration ?? 0;
     setDuration(d * 1000);
@@ -134,8 +173,6 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
     if (!videoRef.current) return;
     videoRef.current.currentTime = ms / 1000;
   }, []);
-
-  const stem = videoPath.split("/").pop()?.replace(".webm", "") ?? "recording";
 
   const handleAnalyze = useCallback(async () => {
     if (!cwd || !activeSessionId || !videoRef.current || !canvasRef.current) return;
@@ -208,7 +245,9 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
   }, [currentMs, events]);
 
   return (
-    <div className="flex flex-col h-full font-sans bg-[#0d1117]">
+    <div className="flex h-full font-sans bg-[#0d1117] overflow-hidden">
+      {/* Left: video + timeline + events */}
+      <div className="flex flex-col flex-1 min-w-0">
         {/* Video */}
         <div className="bg-black flex-shrink-0">
           <video
@@ -220,7 +259,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
             onTimeUpdate={handleTimeUpdate}
           />
           {events.length > 0 && (
-            <div className="flex justify-end px-3 py-1.5">
+            <div className="flex items-center justify-end gap-2 px-3 py-1.5">
               <button
                 onClick={handleAnalyze}
                 disabled={analyzing || !cwd || !activeSessionId}
@@ -316,6 +355,21 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Right: Analysis panel */}
+      {panelOpen && resultContent && (
+        <AnalysisPanel
+          resultContent={resultContent}
+          frames={frames}
+          events={events}
+          currentMs={currentMs}
+          width={panelWidth}
+          onClose={() => setPanelOpen(false)}
+          onWidthChange={setPanelWidth}
+          onSeek={seekTo}
+        />
+      )}
     </div>
   );
 }

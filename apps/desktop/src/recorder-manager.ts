@@ -47,6 +47,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')window.overl
 </html>`;
 
 let recordingTray: Tray | null = null;
+const resultWatchers = new Map<string, FS.FSWatcher>();
 
 function makePNG(width: number, height: number, pixels: Buffer): Buffer {
   const scanlines = Buffer.allocUnsafe(height * (1 + width * 4));
@@ -183,6 +184,62 @@ export function registerRecorderHandlers(getMainWindow: () => BrowserWindow | nu
     if (!filePath || !Path.isAbsolute(filePath)) throw new Error(`Invalid filePath: ${filePath}`);
     await FS.promises.mkdir(Path.dirname(filePath), { recursive: true });
     await FS.promises.writeFile(filePath, content, "utf8");
+  });
+
+  // --- readFile ---
+  ipcMain.handle("recorder:readFile", async (_event, filePath: string) => {
+    if (!filePath || !Path.isAbsolute(filePath)) return null;
+    try {
+      return await FS.promises.readFile(filePath, "utf8");
+    } catch {
+      return null;
+    }
+  });
+
+  // --- listFrames ---
+  ipcMain.handle("recorder:listFrames", async (_event, framesDir: string) => {
+    if (!framesDir || !Path.isAbsolute(framesDir)) return [];
+    try {
+      const entries = await FS.promises.readdir(framesDir);
+      return entries
+        .filter((f) => f.startsWith("frame-") && f.endsWith(".jpg"))
+        .map((f) => ({
+          path: Path.join(framesDir, f),
+          ts_ms: parseInt(f.replace("frame-", "").replace(".jpg", ""), 10),
+        }))
+        .sort((a, b) => a.ts_ms - b.ts_ms);
+    } catch {
+      return [];
+    }
+  });
+
+  // --- watchResult ---
+  ipcMain.handle("recorder:watchResult", async (_event, stemDir: string) => {
+    if (!stemDir || !Path.isAbsolute(stemDir)) return;
+    if (resultWatchers.has(stemDir)) return;
+    await FS.promises.mkdir(stemDir, { recursive: true });
+    try {
+      const watcher = FS.watch(stemDir, { persistent: false }, (_eventType, filename) => {
+        if (filename === "result.md") {
+          const win = getMainWindow();
+          if (win && !win.isDestroyed()) {
+            win.webContents.send("recorder:analysisReady", stemDir);
+          }
+        }
+      });
+      resultWatchers.set(stemDir, watcher);
+    } catch {
+      // Should not happen after mkdir, but guard anyway
+    }
+  });
+
+  // --- unwatchResult ---
+  ipcMain.handle("recorder:unwatchResult", (_event, stemDir: string) => {
+    const watcher = resultWatchers.get(stemDir);
+    if (watcher) {
+      watcher.close();
+      resultWatchers.delete(stemDir);
+    }
   });
 
   // --- openOverlay ---

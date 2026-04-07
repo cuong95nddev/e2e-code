@@ -7,6 +7,7 @@ const entryPoints = [
   { in: "src/content-script.ts", out: "content-script" },
   { in: "src/background.ts",     out: "background" },
   { in: "src/popup.ts",          out: "popup" },
+  { in: "src/recording.ts",      out: "recording" },
 ];
 
 const ctx = await esbuild.context({
@@ -26,8 +27,9 @@ if (watch) {
   ctx.dispose();
 
   // Copy static files to dist/
-  fs.copyFileSync("manifest.json", "dist/manifest.json");
-  fs.copyFileSync("popup.html",    "dist/popup.html");
+  fs.copyFileSync("manifest.json",  "dist/manifest.json");
+  fs.copyFileSync("popup.html",     "dist/popup.html");
+  fs.copyFileSync("recording.html", "dist/recording.html");
 
   // Copy icons if present
   if (fs.existsSync("icons")) {

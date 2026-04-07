@@ -26,6 +26,11 @@ interface ActionEvent {
   delta_y: number | null;
 }
 
+interface FrameEntry {
+  path: string;
+  ts_ms: number;
+}
+
 interface ScreenRegion {
   x: number;
   y: number;
@@ -88,6 +93,11 @@ interface ElectronAPI {
     writeFile(filePath: string, content: string): Promise<void>;
     queryChrome(dbPath: string, fromMs: number, toMs: number): Promise<ChromeEvent[]>;
     onFileListChanged(callback: () => void): () => void;
+    readFile(filePath: string): Promise<string | null>;
+    listFrames(framesDir: string): Promise<FrameEntry[]>;
+    watchResult(stemDir: string): Promise<void>;
+    unwatchResult(stemDir: string): Promise<void>;
+    onAnalysisReady(callback: (stemDir: string) => void): () => void;
   };
   chrome: {
     setActiveCwd(cwd: string): Promise<void>;

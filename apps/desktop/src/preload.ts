@@ -22,6 +22,11 @@ export interface ActionEvent {
   delta_y: number | null;
 }
 
+export interface FrameEntry {
+  path: string;
+  ts_ms: number;
+}
+
 export interface ChromeEvent {
   id: number;
   type: string;
@@ -77,6 +82,11 @@ export interface ElectronAPI {
     writeFile(filePath: string, content: string): Promise<void>;
     queryChrome(dbPath: string, fromMs: number, toMs: number): Promise<ChromeEvent[]>;
     onFileListChanged(callback: () => void): () => void;
+    readFile(filePath: string): Promise<string | null>;
+    listFrames(framesDir: string): Promise<FrameEntry[]>;
+    watchResult(stemDir: string): Promise<void>;
+    unwatchResult(stemDir: string): Promise<void>;
+    onAnalysisReady(callback: (stemDir: string) => void): () => void;
   };
   chrome: {
     setActiveCwd(cwd: string): Promise<void>;
@@ -132,6 +142,16 @@ const api: ElectronAPI = {
       ipcRenderer.invoke("recorder:queryChrome", dbPath, fromMs, toMs),
     onFileListChanged: (callback: () => void) =>
       onChannel("recorder:fileListChanged", callback),
+    readFile: (filePath: string) =>
+      ipcRenderer.invoke("recorder:readFile", filePath),
+    listFrames: (framesDir: string) =>
+      ipcRenderer.invoke("recorder:listFrames", framesDir),
+    watchResult: (stemDir: string) =>
+      ipcRenderer.invoke("recorder:watchResult", stemDir),
+    unwatchResult: (stemDir: string) =>
+      ipcRenderer.invoke("recorder:unwatchResult", stemDir),
+    onAnalysisReady: (callback: (stemDir: string) => void) =>
+      onChannel("recorder:analysisReady", (stemDir) => callback(stemDir as string)),
   },
   chrome: {
     setActiveCwd: (cwd: string) => ipcRenderer.invoke("chrome:setActiveCwd", cwd),
