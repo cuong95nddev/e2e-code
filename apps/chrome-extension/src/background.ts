@@ -51,14 +51,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // ---- Start ----
 
 async function handleStart(body: {
-  streamId: string;
   sessionId: string;
   startTime: number;
   targetTabId: number;
 }): Promise<{ ok: boolean }> {
-  const { streamId, sessionId, startTime, targetTabId } = body;
+  const { sessionId, startTime, targetTabId } = body;
 
-  // Create the dedicated recording tab (pinned, starts active so getUserMedia works)
+  // Create the dedicated recording tab (pinned, starts active so chooseDesktopMedia works)
   const recTab = await chrome.tabs.create({
     url: chrome.runtime.getURL("recording.html"),
     pinned: true,
@@ -68,14 +67,11 @@ async function handleStart(body: {
   // Wait for it to fully load
   await waitForTabLoad(recTab.id!);
 
-  // Hand off the stream ID so it can start MediaRecorder
-  await chrome.tabs.sendMessage(recTab.id!, { name: "doRecord", streamId, sessionId });
-
   // Set in-memory session for event buffering
   currentSessionId = sessionId;
   eventBuffer = [];
 
-  // Persist state
+  // Persist state before the picker opens
   await chrome.storage.session.set({
     recording: true,
     targetTabId,
@@ -96,8 +92,9 @@ async function handleStart(body: {
     console.warn("[bg] startEvents failed:", e);
   }
 
-  // Switch user back to the tab they're recording
-  await chrome.tabs.update(targetTabId, { active: true });
+  // Fire-and-forget: recording tab shows picker then starts MediaRecorder.
+  // It also switches the user back to targetTab once recording begins.
+  chrome.tabs.sendMessage(recTab.id!, { name: "doRecord", sessionId, targetTabId }).catch(() => {});
 
   return { ok: true };
 }

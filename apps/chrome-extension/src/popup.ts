@@ -71,19 +71,6 @@ async function startRecording() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) { connLabel.textContent = "No active tab"; setUI("idle"); return; }
 
-  // tabCapture must be called from popup (requires user gesture context)
-  let streamId: string;
-  try {
-    streamId = await new Promise<string>((resolve, reject) => {
-      chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (id) => {
-        if (chrome.runtime.lastError || !id) reject(chrome.runtime.lastError ?? new Error("no streamId"));
-        else resolve(id);
-      });
-    });
-  } catch (e) {
-    connLabel.textContent = `tabCapture failed: ${e}`; btn.disabled = false; return;
-  }
-
   // Create session on bridge
   let sessionId: string; let startTime: number;
   try {
@@ -94,10 +81,10 @@ async function startRecording() {
     ({ sessionId, startTime } = await res.json() as { sessionId: string; startTime: number });
   } catch { connLabel.textContent = "Bridge error"; btn.disabled = false; return; }
 
-  // Hand off to background to orchestrate recording tab + content script
+  // Hand off to background — recording tab will show the source picker itself
   const result = await chrome.runtime.sendMessage({
     name: "startRecording",
-    body: { streamId, sessionId, startTime, targetTabId: tab.id },
+    body: { sessionId, startTime, targetTabId: tab.id },
   }) as { ok: boolean; error?: string };
 
   if (!result?.ok) { connLabel.textContent = result?.error ?? "Start failed"; btn.disabled = false; return; }

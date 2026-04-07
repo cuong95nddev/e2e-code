@@ -12,7 +12,7 @@ let recordingStart = 0;
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.name === "doRecord") {
-    startRecording(msg.streamId, msg.sessionId)
+    startRecording(msg.sessionId, msg.targetTabId)
       .then(() => sendResponse({ ok: true }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
@@ -25,17 +25,31 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-async function startRecording(streamId: string, sid: string): Promise<void> {
+async function startRecording(sid: string, targetTabId: number): Promise<void> {
   sessionId = sid;
   chunks = [];
+
+  // Show the native Chrome source picker (Entire Screen / Window / Chrome Tab)
+  const streamId = await new Promise<string>((resolve, reject) => {
+    chrome.desktopCapture.chooseDesktopMedia(
+      ["screen", "window", "tab"],
+      (id) => {
+        if (!id) { window.close(); reject(new Error("cancelled")); }
+        else resolve(id);
+      }
+    );
+  });
 
   stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: {
       // @ts-expect-error Chrome-specific constraint
-      mandatory: { chromeMediaSource: "tab", chromeMediaSourceId: streamId },
+      mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: streamId },
     },
   });
+
+  // Switch user back to the tab they're recording now that picker is done
+  await chrome.tabs.update(targetTabId, { active: true });
 
   recordingStart = Date.now();
   recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8" });

@@ -3,7 +3,7 @@
   "name": "e2e-code Recorder",
   "version": "1.0.0",
   "description": "Record tab actions with DOM context for AI-assisted E2E test generation",
-  "permissions": ["tabCapture", "activeTab", "storage", "tabs", "scripting"],
+  "permissions": ["tabCapture", "desktopCapture", "activeTab", "storage", "tabs", "scripting"],
   "host_permissions": ["http://localhost:7878/*"],
   "background": {
     "service_worker": "background.js"
