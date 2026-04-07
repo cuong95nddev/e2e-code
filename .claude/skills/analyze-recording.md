@@ -21,7 +21,8 @@ Use the image to understand what was visible on screen at the moment of the acti
 Output a numbered list of human-readable steps. Rules:
 - Each step starts with a verb: "Clicked", "Typed", "Scrolled", "Right-clicked"
 - Identify the UI element being interacted with from the frame (button label, input field name, menu item, etc.)
-- Group consecutive keydown events within 2 seconds of each other into a single "Typed X" step
+- Group sequential keydown events where each event is within 2 seconds of the previous one into a single "Typed X" step. The typed text is the concatenation of all key_char values in the group.
+- For keyboard shortcuts (Cmd+, Ctrl+, Alt+ combinations), use the format "Pressed Cmd+S" instead of "Typed"
 - For mouse clicks, describe the element and its location (e.g. "the Save button in the top toolbar")
 - For scrolls, describe the direction and the content area being scrolled
 - Keep each step to one sentence
@@ -31,7 +32,7 @@ Output a numbered list of human-readable steps. Rules:
 ```
 ## Step-by-Step Breakdown
 
-1. Clicked [element] — [brief context]
+1. Clicked [element] — [what it triggered or why, omit if obvious]
 2. Typed "[text]" — [brief context]
 3. Scrolled down in [area]
 ...
