@@ -21,6 +21,7 @@ export function useRecorder() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rafRef = useRef<number | null>(null);
   const videoElemRef = useRef<HTMLVideoElement | null>(null);
+  const rawStreamRef = useRef<MediaStream | null>(null);
   const cwdRef = useRef<string>("");
 
   const startRecording = useCallback(async (opts: StartOptions) => {
@@ -37,6 +38,7 @@ export function useRecorder() {
       },
     });
 
+    rawStreamRef.current = rawStream;
     let recordStream: MediaStream = rawStream;
 
     if (opts.cropRegion) {
@@ -86,6 +88,7 @@ export function useRecorder() {
         if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
         if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
         if (videoElemRef.current) { videoElemRef.current.srcObject = null; videoElemRef.current = null; }
+        if (rawStreamRef.current) { rawStreamRef.current.getTracks().forEach((t) => t.stop()); rawStreamRef.current = null; }
 
         const blob = new Blob(chunksRef.current, { type: "video/webm" });
         const buffer = await blob.arrayBuffer();
