@@ -207,17 +207,18 @@ document.addEventListener("keydown", (e) => {
 }, { capture: true, passive: true });
 
 // Scroll: throttled, 200ms
-let lastScrollMs = 0;
+let lastScrollTime = 0;
 document.addEventListener("scroll", (e) => {
   const now = Date.now();
-  if (sessionStartTime && now - (sessionStartTime + lastScrollMs) < 200) return;
-  lastScrollMs = tsMs();
+  if (now - lastScrollTime < 200) return;
+  lastScrollTime = now;
+  const currentTsMs = tsMs();
 
   const target = e.target as Element | null;
   const deltaY = target ? (target as Element & { scrollTop?: number }).scrollTop ?? 0 : window.scrollY;
   send({
     type: "scroll",
-    ts_ms: lastScrollMs,
+    ts_ms: currentTsMs,
     x: null, y: null,
     url: location.href,
     page_title: document.title,

@@ -116,10 +116,19 @@ function insertEvents(events: unknown[]): void {
   try { insertMany(events); } catch (err) { console.error("[chrome-bridge] insert error:", err); }
 }
 
-function readBody(req: http.IncomingMessage): Promise<Buffer> {
+function readBody(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (c: Buffer) => chunks.push(c));
+    let totalSize = 0;
+    req.on("data", (c: Buffer) => {
+      totalSize += c.length;
+      if (totalSize > maxBytes) {
+        reject(new Error(`Request body too large (limit: ${maxBytes} bytes)`));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
@@ -190,7 +199,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
 
   // POST /events
   if (req.method === "POST" && url === "/events") {
-    readBody(req).then((buf) => {
+    readBody(req, 10 * 1024 * 1024).then((buf) => {
       try {
         const body = JSON.parse(buf.toString()) as { events: unknown[] };
         insertEvents(body.events ?? []);
@@ -210,7 +219,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     const cwd = activeCwd ?? Path.join(process.env["HOME"] ?? "/tmp", "recordings");
     const webmPath = Path.join(cwd, "recordings", `${stem}.webm`);
 
-    readBody(req).then((buf) => {
+    readBody(req, 200 * 1024 * 1024).then((buf) => {
       FS.writeFile(webmPath, buf, (err) => {
         if (err) { jsonResponse(res, 500, { error: String(err) }); return; }
         jsonResponse(res, 200, { ok: true, path: webmPath });

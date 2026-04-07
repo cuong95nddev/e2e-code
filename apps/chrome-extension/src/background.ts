@@ -122,8 +122,9 @@ async function startSession(tabId: number): Promise<{ ok: boolean; error?: strin
 
   // Start elapsed timer
   session.timerInterval = setInterval(() => {
-    session!.elapsedSeconds++;
-    chrome.storage.session.set({ elapsedSeconds: session!.elapsedSeconds });
+    if (!session) return;
+    session.elapsedSeconds++;
+    chrome.storage.session.set({ elapsedSeconds: session.elapsedSeconds });
   }, 1000);
 
   chrome.storage.session.set({ recording: true, elapsedSeconds: 0 });
