@@ -14,7 +14,7 @@ export interface ElectronAPI {
     openExternal(url: string): Promise<void>;
   };
   recorder: {
-    getSources(): Promise<{ id: string; name: string; thumbnail: string }[]>;
+    getSources(): Promise<{ id: string; name: string; thumbnail: string /* base64 data URL */ }[]>;
     openOverlay(screenSourceId: string): Promise<{ x: number; y: number; width: number; height: number } | null>;
     saveFile(cwd: string, buffer: ArrayBuffer): Promise<string>;
     onTogglePicker(callback: () => void): () => void;
