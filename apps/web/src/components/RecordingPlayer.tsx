@@ -155,12 +155,12 @@ export function RecordingPlayer({ videoPath, dbPath, onClose }: Props) {
               {dbPath ? "No actions captured" : "No action data for this recording"}
             </div>
           )}
-          {events.map((ev) => (
+          {events.map((ev, i) => (
             <button
               key={ev.id}
               onClick={() => seekTo(ev.ts_ms)}
               className={`w-full flex items-center gap-3 px-2 py-1 rounded text-left hover:bg-[#161b22] transition-colors ${
-                ev.ts_ms <= currentMs && (events[events.indexOf(ev) + 1]?.ts_ms ?? Infinity) > currentMs
+                ev.ts_ms <= currentMs && (events[i + 1]?.ts_ms ?? Infinity) > currentMs
                   ? "bg-[#161b22]"
                   : ""
               }`}
