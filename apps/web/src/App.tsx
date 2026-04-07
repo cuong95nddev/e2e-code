@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { PanelLeft, PanelBottom } from "lucide-react";
 import { Terminal } from "./components/Terminal";
 import { RecordingsList } from "./components/RecordingsList";
 import { RecordingPlayer } from "./components/RecordingPlayer";
 import { Button } from "~/components/ui/button";
-import { TooltipProvider } from "~/components/ui/tooltip";
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 
 interface Session {
@@ -25,9 +26,10 @@ export function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [recordingRefreshKey, setRecordingRefreshKey] = useState(0);
   const [selectedRecording, setSelectedRecording] = useState<RecordingMeta | null>(null);
-  const [terminalHeight, setTerminalHeight] = useState(300);
-  const [terminalVisible, setTerminalVisible] = useState(true);
-  const [leftWidth, setLeftWidth] = useState(288);
+  const [terminalHeight, setTerminalHeight] = useState(() => Number(localStorage.getItem("terminalHeight")) || 300);
+  const [terminalVisible, setTerminalVisible] = useState(() => localStorage.getItem("terminalVisible") !== "false");
+  const [leftVisible, setLeftVisible] = useState(() => localStorage.getItem("leftVisible") !== "false");
+  const [leftWidth, setLeftWidth] = useState(() => Number(localStorage.getItem("leftWidth")) || 288);
   const isDragging = useRef(false);
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
@@ -81,6 +83,12 @@ export function App() {
     );
     window.electronAPI.pty.create(id, session.cwd, null, false);
   }, [sessions]);
+
+  // Persist layout settings
+  useEffect(() => { localStorage.setItem("terminalHeight", String(terminalHeight)); }, [terminalHeight]);
+  useEffect(() => { localStorage.setItem("terminalVisible", String(terminalVisible)); }, [terminalVisible]);
+  useEffect(() => { localStorage.setItem("leftVisible", String(leftVisible)); }, [leftVisible]);
+  useEffect(() => { localStorage.setItem("leftWidth", String(leftWidth)); }, [leftWidth]);
 
   // Drag-to-resize handlers
   useEffect(() => {
@@ -161,6 +169,24 @@ export function App() {
         >
           <div className="w-20 flex-shrink-0" />
           <div className="flex-1" />
+          <div className="flex items-center gap-1 px-2" style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+            <Tooltip>
+              <TooltipTrigger>
+                <Button variant="ghost" size="icon" onClick={() => setLeftVisible((v) => !v)} className={cn(!leftVisible && "text-muted-foreground")}>
+                  <PanelLeft />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{leftVisible ? "Hide" : "Show"} sidebar</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => setTerminalVisible((v) => !v)} className={cn(!terminalVisible && "text-muted-foreground")}>
+                  <PanelBottom />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{terminalVisible ? "Hide" : "Show"} terminal</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
 
         {/* Main content area */}
@@ -168,30 +194,30 @@ export function App() {
           {/* Top content — two columns */}
           <div className="flex-1 min-h-0 flex overflow-hidden">
             {/* Left: recordings list */}
-            <div
-              className="flex-shrink-0 flex flex-col border-r border-border p-3 overflow-y-auto"
-              style={{ width: leftWidth }}
-            >
-              <RecordingsList
-                cwd={activeSession?.cwd ?? null}
-                refreshKey={recordingRefreshKey}
-                selectedPath={selectedRecording?.path ?? null}
-                onSelect={setSelectedRecording}
-              />
-              {sessions.length === 0 && (
-                <div className="flex items-center justify-center flex-1">
-                  <Button onClick={() => createSession()}>
-                    Open Project Folder
-                  </Button>
+            {leftVisible && (
+              <>
+                <div
+                  className="shrink-0 flex flex-col border-r border-border p-3 overflow-y-auto"
+                  style={{ width: leftWidth }}
+                >
+                  <RecordingsList
+                    cwd={activeSession?.cwd ?? null}
+                    refreshKey={recordingRefreshKey}
+                    selectedPath={selectedRecording?.path ?? null}
+                    onSelect={setSelectedRecording}
+                  />
+                  {sessions.length === 0 && (
+                    <div className="flex items-center justify-center flex-1">
+                      <Button onClick={() => createSession()}>Open Project Folder</Button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-
-            {/* Left/Right resize handle */}
-            <div
-              className="w-1 flex-shrink-0 bg-border hover:bg-primary/40 cursor-col-resize transition-colors"
-              onMouseDown={handleLeftDragStart}
-            />
+                <div
+                  className="w-1 shrink-0 bg-border hover:bg-primary/40 cursor-col-resize transition-colors"
+                  onMouseDown={handleLeftDragStart}
+                />
+              </>
+            )}
 
             {/* Right: video player */}
             <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
@@ -214,7 +240,7 @@ export function App() {
           </div>
 
           {/* Terminal panel */}
-          {terminalVisible ? (
+          {terminalVisible && (
             <>
               <div
                 className="h-1 bg-border hover:bg-primary/40 cursor-ns-resize transition-colors flex-shrink-0"
@@ -262,12 +288,6 @@ export function App() {
                     +
                   </button>
                 </div>
-                <button
-                  onClick={() => setTerminalVisible(false)}
-                  className="text-muted-foreground hover:text-foreground text-sm leading-none flex-shrink-0"
-                >
-                  ×
-                </button>
               </div>
               <div className="relative flex-shrink-0" style={{ height: terminalHeight }}>
                 {sessions.map((s) => (
@@ -293,15 +313,6 @@ export function App() {
                 ))}
               </div>
             </>
-          ) : (
-            <div className="flex items-center h-7 bg-card border-t border-border px-3 flex-shrink-0">
-              <button
-                onClick={() => setTerminalVisible(true)}
-                className="text-xs text-muted-foreground uppercase tracking-widest hover:text-foreground font-sans transition-colors"
-              >
-                Terminal
-              </button>
-            </div>
           )}
         </div>
       </div>

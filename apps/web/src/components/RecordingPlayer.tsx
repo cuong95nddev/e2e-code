@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Camera, MousePointerClick, Keyboard, ArrowUpDown, Navigation2, type LucideIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { ScrollArea } from "~/components/ui/scroll-area";
@@ -11,6 +11,18 @@ interface Props {
   cwd: string | null;
   activeSessionId: string | null;
 }
+
+const TYPE_ICON: Record<string, LucideIcon> = {
+  mousedown:  MousePointerClick,
+  mouseup:    MousePointerClick,
+  click:      MousePointerClick,
+  keydown:    Keyboard,
+  keyup:      Keyboard,
+  input:      Keyboard,
+  wheel:      ArrowUpDown,
+  scroll:     ArrowUpDown,
+  navigation: Navigation2,
+};
 
 const TYPE_COLOR: Record<string, string> = {
   mousedown: "var(--primary)",
@@ -402,18 +414,22 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                 className="absolute top-0 bottom-0 w-px bg-primary"
                 style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
               />
-              {displayEvents.map((ev) => (
-                <div
-                  key={ev.id}
-                  className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
-                  style={{
-                    left: `${(ev.ts_ms / effectiveDuration) * 100}%`,
-                    backgroundColor: TYPE_COLOR[ev.type] ?? "var(--muted-foreground)",
-                  }}
-                  onClick={(e) => { e.stopPropagation(); seekTo(ev.ts_ms); }}
-                  title={`${formatMs(ev.ts_ms)} ${ev.type}`}
-                />
-              ))}
+              {displayEvents.map((ev) => {
+                const Icon = TYPE_ICON[ev.type];
+                return (
+                  <div
+                    key={ev.id}
+                    className="absolute -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform"
+                    style={{ left: `${(ev.ts_ms / effectiveDuration) * 100}%`, top: "2px", color: TYPE_COLOR[ev.type] ?? "var(--muted-foreground)" }}
+                    onClick={(e) => { e.stopPropagation(); seekTo(ev.ts_ms); }}
+                    title={`${formatMs(ev.ts_ms)} ${ev.type}`}
+                  >
+                    {Icon
+                      ? <Icon className="size-3" />
+                      : <span className="block w-1.5 h-1.5 rounded-full bg-current" />}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Analysis result row */}
@@ -451,14 +467,15 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId }: Pro
                     return (
                       <div
                         key={f.ts_ms}
-                        className="absolute top-1 w-1.5 h-1.5 rounded-full -translate-x-1/2 cursor-pointer hover:scale-150 transition-transform"
-                        style={{
-                          left: `${(f.ts_ms / effectiveDuration) * 100}%`,
-                          backgroundColor: isActive ? "var(--chart-4)" : "var(--muted-foreground)",
-                        }}
+                        className="absolute -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform"
+                        style={{ left: `${(f.ts_ms / effectiveDuration) * 100}%`, top: "2px" }}
                         onClick={(e) => { e.stopPropagation(); seekTo(f.ts_ms); }}
                         title={label ? `${formatMs(f.ts_ms)} — ${label}` : formatMs(f.ts_ms)}
-                      />
+                      >
+                        <Camera
+                          className={cn("size-3", isActive ? "text-chart-4" : "text-muted-foreground")}
+                        />
+                      </div>
                     );
                   })}
                 </div>
