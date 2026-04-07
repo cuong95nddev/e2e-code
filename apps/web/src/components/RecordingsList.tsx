@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
+import { Video } from "lucide-react";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { Badge } from "~/components/ui/badge";
-import { cn } from "~/lib/utils";
+import { Button } from "~/components/ui/button";
 
 interface Props {
   cwd: string | null;
@@ -32,32 +33,25 @@ export function RecordingsList({ cwd, refreshKey, selectedPath, onSelect }: Prop
   return (
     <div className="mt-3 flex flex-col min-h-0 font-sans">
       <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
+        <span className="text-xs text-muted-foreground uppercase tracking-widest">
           Recordings
         </span>
-        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4">
-          {recordings.length}
-        </Badge>
+        <Badge variant="secondary">{recordings.length}</Badge>
       </div>
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-1 pr-1">
           {recordings.map((r) => (
-            <button
+            <Button
               key={r.path}
+              variant={selectedPath === r.path ? "secondary" : "ghost"}
+              size="sm"
               onClick={() => onSelect(selectedPath === r.path ? null : r)}
-              className={cn(
-                "w-full flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-colors text-xs",
-                selectedPath === r.path
-                  ? "border-primary bg-background text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:border-border/70 hover:text-card-foreground"
-              )}
+              className="w-full justify-start gap-2 font-normal"
             >
-              <span className="text-sm">🎬</span>
-              <span className="flex-1 font-mono truncate">{formatName(r.name)}</span>
-              <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                {formatSize(r.size)}
-              </span>
-            </button>
+              <Video className="size-3 shrink-0 text-muted-foreground" />
+              <span className="flex-1 font-mono truncate text-left">{formatName(r.name)}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{formatSize(r.size)}</span>
+            </Button>
           ))}
         </div>
       </ScrollArea>

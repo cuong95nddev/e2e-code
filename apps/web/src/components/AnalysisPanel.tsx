@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect } from "react";
+import { X } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { cn } from "~/lib/utils";
@@ -120,13 +121,8 @@ export function AnalysisPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0">
         <span className="text-xs font-semibold text-foreground">Analysis</span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClose}
-          className="h-auto w-auto p-0.5 text-muted-foreground hover:text-foreground"
-        >
-          ×
+        <Button variant="ghost" size="icon" onClick={onClose}>
+          <X />
         </Button>
       </div>
 
@@ -162,7 +158,7 @@ export function AnalysisPanel({
                 <div className="px-2 py-1.5 bg-card flex items-start gap-2">
                   <span
                     className={cn(
-                      "text-[10px] font-mono flex-shrink-0 mt-0.5",
+                      "text-xs font-mono shrink-0 mt-0.5",
                       isActive ? "text-primary" : "text-muted-foreground"
                     )}
                   >
@@ -172,14 +168,14 @@ export function AnalysisPanel({
                     {stepText ? (
                       <span
                         className={cn(
-                          "text-[11px] leading-snug",
+                          "text-xs leading-snug",
                           isActive ? "text-foreground" : "text-card-foreground"
                         )}
                       >
                         {stepText.trim()}
                       </span>
                     ) : (
-                      <span className="text-[10px] text-muted-foreground font-mono">
+                      <span className="text-xs text-muted-foreground font-mono">
                         {formatMs(frame.ts_ms)}
                       </span>
                     )}

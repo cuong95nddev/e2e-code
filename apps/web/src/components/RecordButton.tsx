@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
+import { Monitor, AppWindow, Scissors } from "lucide-react";
 import { useRecorder, type RecorderMode } from "../hooks/useRecorder";
 import { RecordingIndicator } from "./RecordingIndicator";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { Badge } from "~/components/ui/badge";
 import { cn } from "~/lib/utils";
 
 interface Props {
@@ -100,32 +102,32 @@ export function RecordButton({ cwd, onSaved }: Props) {
     <>
       <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
         {/* PopoverTrigger (base-nova) renders its own element; render trigger content inline */}
-        <PopoverTrigger className="flex items-center gap-1.5 h-7 rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium hover:bg-muted hover:text-foreground transition-all">
-          <span className="w-2 h-2 rounded-full bg-destructive flex-shrink-0" />
-          Record
-          <span className="ml-0.5 text-[10px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-sans">
-            ⌘⇧5
-          </span>
+        <PopoverTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1.5">
+            <span className="size-2 rounded-full bg-destructive flex-shrink-0" />
+            Record
+            <Badge variant="secondary">⌘⇧5</Badge>
+          </Button>
         </PopoverTrigger>
         <PopoverContent className="w-72 p-3 font-sans" align="start">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">
+          <div className="text-xs text-muted-foreground uppercase tracking-widest mb-2">
             Chế độ
           </div>
           <Tabs value={mode} onValueChange={(v) => setMode(v as RecorderMode)} className="mb-3">
             <TabsList className="w-full">
-              <TabsTrigger value="screen" className="flex-1 text-[11px]">🖥 Toàn màn hình</TabsTrigger>
-              <TabsTrigger value="window" className="flex-1 text-[11px]">🪟 Cửa sổ</TabsTrigger>
-              <TabsTrigger value="region" className="flex-1 text-[11px]">✂️ Vùng chọn</TabsTrigger>
+              <TabsTrigger value="screen" className="flex-1"><Monitor className="size-4" /> Toàn màn hình</TabsTrigger>
+              <TabsTrigger value="window" className="flex-1"><AppWindow className="size-4" /> Cửa sổ</TabsTrigger>
+              <TabsTrigger value="region" className="flex-1"><Scissors className="size-4" /> Vùng chọn</TabsTrigger>
             </TabsList>
           </Tabs>
 
           {mode !== "region" && (
             <>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">
+              <div className="text-xs text-muted-foreground uppercase tracking-widest mb-2">
                 {mode === "screen" ? "Màn hình" : "Cửa sổ"}
               </div>
               {sourcesForMode.length === 0 ? (
-                <div className="text-[11px] text-muted-foreground mb-3">Đang tải...</div>
+                <div className="text-xs text-muted-foreground mb-3">Đang tải...</div>
               ) : (
                 <div className="flex gap-2 flex-wrap mb-3">
                   {sourcesForMode.map((s) => (
@@ -144,7 +146,7 @@ export function RecordButton({ cwd, onSaved }: Props) {
                         className="w-20 h-12 rounded object-cover mb-1"
                         alt={s.name}
                       />
-                      <div className="text-[10px] text-muted-foreground truncate max-w-[80px]">
+                      <div className="text-xs text-muted-foreground truncate max-w-[80px]">
                         {s.name}
                       </div>
                     </button>
@@ -155,8 +157,8 @@ export function RecordButton({ cwd, onSaved }: Props) {
           )}
 
           {mode === "region" && (
-            <div className="mb-3 py-3 border border-dashed border-border rounded-lg text-center text-muted-foreground text-xs">
-              ✂️ Kéo chọn vùng sau khi nhấn bắt đầu
+            <div className="mb-3 py-3 border border-dashed rounded-lg text-center text-muted-foreground text-xs">
+              Kéo chọn vùng sau khi nhấn bắt đầu
             </div>
           )}
 
@@ -165,7 +167,7 @@ export function RecordButton({ cwd, onSaved }: Props) {
             onClick={handleStart}
             disabled={mode !== "region" && !selectedSourceId}
           >
-            Bắt đầu quay ⏺
+            Bắt đầu quay
           </Button>
         </PopoverContent>
       </Popover>

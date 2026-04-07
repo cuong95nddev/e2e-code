@@ -17,12 +17,7 @@ export function RecordingIndicator({ elapsed, onStop }: Props) {
         {mm}:{ss}
       </span>
       <Separator orientation="vertical" className="h-3.5 bg-destructive/30" />
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onStop}
-        className="h-auto py-0.5 px-1.5 text-xs text-muted-foreground hover:text-foreground"
-      >
+      <Button variant="ghost" size="sm" onClick={onStop}>
         Stop
       </Button>
     </div>

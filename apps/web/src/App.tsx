@@ -221,7 +221,7 @@ export function App() {
                 onMouseDown={handleDragStart}
               />
               <div className="flex items-center h-8 bg-card border-t border-border flex-shrink-0 px-2 gap-1">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-sans px-1">
+                <span className="text-xs text-muted-foreground uppercase tracking-widest font-sans px-1">
                   Terminal
                 </span>
                 <div
@@ -243,7 +243,7 @@ export function App() {
                       <span
                         className={cn(
                           "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                          s.exited ? "bg-destructive" : "bg-green-500"
+                          s.exited ? "bg-destructive" : "bg-chart-2"
                         )}
                       />
                       <span className="truncate">{folderName(s.cwd)}</span>
@@ -297,7 +297,7 @@ export function App() {
             <div className="flex items-center h-7 bg-card border-t border-border px-3 flex-shrink-0">
               <button
                 onClick={() => setTerminalVisible(true)}
-                className="text-[10px] text-muted-foreground uppercase tracking-widest hover:text-foreground font-sans transition-colors"
+                className="text-xs text-muted-foreground uppercase tracking-widest hover:text-foreground font-sans transition-colors"
               >
                 Terminal
               </button>
