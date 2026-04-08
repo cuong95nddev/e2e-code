@@ -12,7 +12,7 @@ let recordingStart = 0;
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.name === "doRecord") {
-    startRecording(msg.mode, msg.sessionId, msg.targetTabId, msg.streamId)
+    startRecording(msg.mode, msg.sessionId, msg.targetTabId)
       .then(() => sendResponse({ ok: true }))
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;
@@ -29,7 +29,6 @@ async function startRecording(
   mode: "tab" | "picker",
   sid: string,
   targetTabId: number,
-  existingStreamId?: string,
 ): Promise<void> {
   sessionId = sid;
   chunks = [];
@@ -37,10 +36,16 @@ async function startRecording(
   let streamId: string;
   let chromeMediaSource: string;
 
-  if (mode === "tab" && existingStreamId) {
-    // Stream ID was obtained via tabCapture in the popup — use it directly
-    streamId = existingStreamId;
+  if (mode === "tab") {
+    // Obtain stream ID here in the recording tab — avoids expiry from popup handoff
+    streamId = await new Promise<string>((resolve, reject) => {
+      chrome.tabCapture.getMediaStreamId({ targetTabId }, (id) => {
+        if (chrome.runtime.lastError || !id) reject(chrome.runtime.lastError ?? new Error("no streamId"));
+        else resolve(id);
+      });
+    });
     chromeMediaSource = "tab";
+    await chrome.tabs.update(targetTabId, { active: true });
   } else {
     // Show the native Chrome source picker (Entire Screen / Window / Chrome Tab)
     streamId = await new Promise<string>((resolve, reject) => {

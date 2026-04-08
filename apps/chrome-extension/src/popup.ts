@@ -87,25 +87,12 @@ async function createSession(): Promise<{ sessionId: string; startTime: number }
   }
 }
 
-// Record current tab using tabCapture — stream ID obtained in popup then passed to recording tab
+// Record current tab — recording tab calls tabCapture.getMediaStreamId itself to avoid expiry
 async function startTabRecording() {
   setUI("busy");
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) { connLabel.textContent = "No active tab"; setUI("idle"); return; }
-
-  // tabCapture must be called from popup (user gesture context)
-  let streamId: string;
-  try {
-    streamId = await new Promise<string>((resolve, reject) => {
-      chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (id) => {
-        if (chrome.runtime.lastError || !id) reject(chrome.runtime.lastError ?? new Error("no streamId"));
-        else resolve(id);
-      });
-    });
-  } catch (e) {
-    connLabel.textContent = `tabCapture failed: ${e}`; setUI("idle"); return;
-  }
 
   const session = await createSession();
   if (!session) { setUI("idle"); return; }
@@ -113,7 +100,7 @@ async function startTabRecording() {
 
   const result = await chrome.runtime.sendMessage({
     name: "startRecording",
-    body: { mode: "tab", streamId, sessionId, startTime, targetTabId: tab.id },
+    body: { mode: "tab", sessionId, startTime, targetTabId: tab.id },
   }) as { ok: boolean; error?: string };
 
   if (!result?.ok) { connLabel.textContent = result?.error ?? "Start failed"; setUI("idle"); return; }

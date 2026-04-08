@@ -55,9 +55,8 @@ async function handleStart(body: {
   sessionId: string;
   startTime: number;
   targetTabId: number;
-  streamId?: string;
 }): Promise<{ ok: boolean }> {
-  const { mode, sessionId, startTime, targetTabId, streamId } = body;
+  const { mode, sessionId, startTime, targetTabId } = body;
 
   // Create the dedicated recording tab (pinned, active so getUserMedia / chooseDesktopMedia works)
   const recTab = await chrome.tabs.create({
@@ -89,14 +88,10 @@ async function handleStart(body: {
     console.warn("[bg] startEvents failed:", e);
   }
 
-  // For "tab" mode, streamId is already known — pass it so recording tab skips the picker.
-  // For "picker" mode, recording tab will call chooseDesktopMedia itself, then switch back.
-  chrome.tabs.sendMessage(recTab.id!, { name: "doRecord", mode, sessionId, targetTabId, streamId }).catch(() => {});
-
-  // For tab mode, switch back immediately (no picker to wait for)
-  if (mode === "tab") {
-    await chrome.tabs.update(targetTabId, { active: true });
-  }
+  // Recording tab handles both modes:
+  // - "tab": calls tabCapture.getMediaStreamId(targetTabId) itself then starts immediately
+  // - "picker": calls chooseDesktopMedia, user picks source, then switches back to targetTab
+  chrome.tabs.sendMessage(recTab.id!, { name: "doRecord", mode, sessionId, targetTabId }).catch(() => {})
 
   return { ok: true };
 }
