@@ -28,7 +28,11 @@ const videoServer = Http.createServer((req, res) => {
   catch { res.writeHead(404); res.end(); return; }
 
   const total = stat.size;
-  const mime = filePath.endsWith(".webm") ? "video/webm" : "video/mp4";
+  const mime = filePath.endsWith(".webm") ? "video/webm"
+    : filePath.endsWith(".mp4") ? "video/mp4"
+    : filePath.endsWith(".jpg") || filePath.endsWith(".jpeg") ? "image/jpeg"
+    : filePath.endsWith(".png") ? "image/png"
+    : "application/octet-stream";
   const range = req.headers.range;
 
   if (range) {
@@ -41,6 +45,7 @@ const videoServer = Http.createServer((req, res) => {
       "Content-Range": `bytes ${start}-${end}/${total}`,
       "Accept-Ranges": "bytes",
       "Content-Length": String(end - start + 1),
+      "Access-Control-Allow-Origin": "*",
     });
     FS.createReadStream(filePath, { start, end }).pipe(res);
   } else {
@@ -48,6 +53,7 @@ const videoServer = Http.createServer((req, res) => {
       "Content-Type": mime,
       "Accept-Ranges": "bytes",
       "Content-Length": String(total),
+      "Access-Control-Allow-Origin": "*",
     });
     FS.createReadStream(filePath).pipe(res);
   }

@@ -3,6 +3,8 @@ import { Play, Pause, Volume2, VolumeX, Maximize, Camera, MousePointerClick, Key
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 
 interface Props {
@@ -110,6 +112,7 @@ async function extractFrame(
   tsMs: number,
 ): Promise<ArrayBuffer> {
   const video = document.createElement("video");
+  video.crossOrigin = "anonymous";
   video.src = src;
   video.muted = true;
   video.preload = "auto";
@@ -160,6 +163,8 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
   const [resultContent, setResultContent] = useState<string | null>(null);
   const [frames, setFrames] = useState<{ path: string; ts_ms: number }[]>([]);
   const [eventsDialogOpen, setEventsDialogOpen] = useState(false);
+  const [resultDialogOpen, setResultDialogOpen] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
 
   useEffect(() => {
     setPaused(true);
@@ -175,6 +180,10 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
   const stemDir = cwd ? `${cwd}/recordings/${stem}` : null;
   const resultPath = stemDir ? `${stemDir}/result.md` : null;
   const framesDir = stemDir ? `${stemDir}/frames` : null;
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = playbackRate;
+  }, [playbackRate]);
 
   const loadResult = useCallback(async () => {
     if (!resultPath || !framesDir) return;
@@ -354,6 +363,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
         <div ref={containerRef} className="bg-black flex-1 min-h-0 relative">
           <video
             ref={videoRef}
+            crossOrigin="anonymous"
             src={videoServerPort > 0 ? `http://127.0.0.1:${videoServerPort}${videoPath}` : undefined}
             className="w-full h-full object-contain block"
             onLoadedMetadata={handleMetadata}
@@ -385,6 +395,17 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
 
           <div className="flex-1" />
 
+          <Select value={String(playbackRate)} onValueChange={(v) => setPlaybackRate(Number(v))}>
+            <SelectTrigger className="h-7 w-16 text-xs font-mono">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3].map((rate) => (
+                <SelectItem key={rate} value={String(rate)} className="text-xs font-mono">{rate}×</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button variant="ghost" size="icon" onClick={toggleMute} title={muted ? "Unmute" : "Mute"}>
             {muted ? <VolumeX /> : <Volume2 />}
           </Button>
@@ -392,12 +413,6 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
           <Button variant="ghost" size="icon" onClick={toggleFullscreen} title="Fullscreen">
             <Maximize />
           </Button>
-
-          {displayEvents.length > 0 && (
-            <Button variant="secondary" size="sm" onClick={() => setEventsDialogOpen(true)}>
-              Events
-            </Button>
-          )}
 
           {displayEvents.length > 0 && (
             <Button variant="secondary" size="sm" onClick={handleAnalyze} disabled={analyzing || !cwd || !activeSessionId}>
@@ -409,35 +424,48 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
 
         {/* Timeline */}
         {effectiveDuration > 0 && (
-          <div className="px-4 pt-2 pb-1 border-t border-border flex-shrink-0 space-y-1">
+          <div className="px-4 py-3 border-t border-border flex-shrink-0 space-y-2">
             {/* Events row */}
-            <div
-              className="relative h-5 bg-card rounded cursor-crosshair overflow-hidden"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                seekTo(((e.clientX - rect.left) / rect.width) * effectiveDuration);
-              }}
-            >
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="sm" className="text-xs h-6 w-16 flex-shrink-0" onClick={() => setEventsDialogOpen(true)}>
+                events
+              </Button>
               <div
-                className="absolute top-0 bottom-0 w-px bg-primary"
-                style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
-              />
-              {displayEvents.map((ev) => {
-                const Icon = TYPE_ICON[ev.type];
-                return (
-                  <div
-                    key={ev.id}
-                    className="absolute -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform"
-                    style={{ left: `${(ev.ts_ms / effectiveDuration) * 100}%`, top: "2px", color: TYPE_COLOR[ev.type] ?? "var(--muted-foreground)" }}
-                    onClick={(e) => { e.stopPropagation(); seekTo(ev.ts_ms); }}
-                    title={`${formatMs(ev.ts_ms)} ${ev.type}`}
-                  >
-                    {Icon
-                      ? <Icon className="size-3" />
-                      : <span className="block w-1.5 h-1.5 rounded-full bg-current" />}
-                  </div>
-                );
-              })}
+                className="relative h-5 bg-card rounded cursor-crosshair overflow-hidden flex-1"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  seekTo(((e.clientX - rect.left) / rect.width) * effectiveDuration);
+                }}
+              >
+                <div
+                  className="absolute top-0 bottom-0 w-px bg-primary"
+                  style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
+                />
+                {displayEvents.map((ev) => {
+                  const Icon = TYPE_ICON[ev.type];
+                  const label = useChrome
+                    ? describeChromeEvent(ev as ChromeEvent)
+                    : describeEvent(ev as ActionEvent);
+                  return (
+                    <Tooltip key={ev.id}>
+                      <TooltipTrigger
+                        className="absolute -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform"
+                        style={{ left: `${(ev.ts_ms / effectiveDuration) * 100}%`, top: "2px", color: TYPE_COLOR[ev.type] ?? "var(--muted-foreground)" }}
+                        onClick={(e) => { e.stopPropagation(); seekTo(ev.ts_ms); }}
+                      >
+                        {Icon
+                          ? <Icon className="size-3" />
+                          : <span className="block w-1.5 h-1.5 rounded-full bg-current" />}
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <span className="opacity-60">{formatMs(ev.ts_ms)}</span>
+                        <span className="font-medium">{formatType(ev.type)}</span>
+                        {label && <span>{label}</span>}
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Analysis result row */}
@@ -457,48 +485,119 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
                 }
               }
               return (
-                <div
-                  className="relative h-5 bg-card rounded cursor-crosshair overflow-hidden"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    seekTo(((e.clientX - rect.left) / rect.width) * effectiveDuration);
-                  }}
-                >
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" size="sm" className="text-xs h-6 w-16 flex-shrink-0" onClick={() => setResultDialogOpen(true)}>
+                    result
+                  </Button>
                   <div
-                    className="absolute top-0 bottom-0 w-px bg-primary"
-                    style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
-                  />
-                  {frames.map((f) => {
-                    const name = f.path.split("/").pop() ?? "";
-                    const label = stepByFrame.get(name);
-                    const isActive = frames.findLast((fr) => fr.ts_ms <= currentMs)?.ts_ms === f.ts_ms;
-                    return (
-                      <div
-                        key={f.ts_ms}
-                        className="absolute -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform"
-                        style={{ left: `${(f.ts_ms / effectiveDuration) * 100}%`, top: "2px" }}
-                        onClick={(e) => { e.stopPropagation(); seekTo(f.ts_ms); }}
-                        title={label ? `${formatMs(f.ts_ms)} — ${label}` : formatMs(f.ts_ms)}
-                      >
-                        <Camera
-                          className={cn("size-3", isActive ? "text-chart-4" : "text-muted-foreground")}
-                        />
-                      </div>
-                    );
-                  })}
+                    className="relative h-5 bg-card rounded cursor-crosshair overflow-hidden flex-1"
+                    onClick={(e) => {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      seekTo(((e.clientX - rect.left) / rect.width) * effectiveDuration);
+                    }}
+                  >
+                    <div
+                      className="absolute top-0 bottom-0 w-px bg-primary"
+                      style={{ left: `${(currentMs / effectiveDuration) * 100}%` }}
+                    />
+                    {frames.map((f) => {
+                      const name = f.path.split("/").pop() ?? "";
+                      const label = stepByFrame.get(name);
+                      const isActive = frames.findLast((fr) => fr.ts_ms <= currentMs)?.ts_ms === f.ts_ms;
+                      return (
+                        <Tooltip key={f.ts_ms}>
+                          <TooltipTrigger
+                            className="absolute -translate-x-1/2 cursor-pointer hover:scale-125 transition-transform"
+                            style={{ left: `${(f.ts_ms / effectiveDuration) * 100}%`, top: "2px" }}
+                            onClick={(e) => { e.stopPropagation(); seekTo(f.ts_ms); }}
+                          >
+                            <Camera
+                              className={cn("size-3", isActive ? "text-chart-4" : "text-muted-foreground")}
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <span className="opacity-60">{formatMs(f.ts_ms)}</span>
+                            {label && <span>{label}</span>}
+                          </TooltipContent>
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })()}
 
-            <div className="flex justify-between">
-              <span className="text-xs text-muted-foreground">0s</span>
-              <span className="text-xs text-muted-foreground">{formatMs(effectiveDuration)}</span>
-            </div>
+
           </div>
         )}
 
         <canvas ref={canvasRef} className="hidden" />
       </div>
+
+      {/* Result dialog */}
+      {(() => {
+        if (!resultContent) return null;
+        const steps: { framePath: string | null; description: string; ts_ms: number | null }[] = [];
+        for (const line of resultContent.split("\n")) {
+          const match = line.match(/^\d+\. (.*)$/);
+          if (!match) continue;
+          const body = match[1]!;
+          const fm = body.match(/^((?:`frame-[^`]+\.jpg`(?:,\s*)?)+)\s*[—-]\s*(.*)$/);
+          if (fm) {
+            const frameNames = [...fm[1]!.matchAll(/`(frame-[^`]+\.jpg)`/g)].map((m) => m[1]!);
+            const firstFrame = frames.find((f) => frameNames.includes(f.path.split("/").pop() ?? ""));
+            steps.push({ framePath: firstFrame?.path ?? null, description: fm[2]!, ts_ms: firstFrame?.ts_ms ?? null });
+          } else {
+            steps.push({ framePath: null, description: body, ts_ms: null });
+          }
+        }
+        return (
+          <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
+            <DialogContent className="w-[640px] max-h-[80vh] flex flex-col p-0 gap-0">
+              <DialogHeader className="px-4 py-3 border-b border-border flex-shrink-0">
+                <DialogTitle className="text-xs font-semibold">
+                  Analysis Result ({steps.length} steps)
+                </DialogTitle>
+              </DialogHeader>
+              <ScrollArea className="flex-1">
+                <div className="px-3 py-2 space-y-1">
+                  {steps.map((step, i) => (
+                    <Button
+                      key={i}
+                      variant="ghost"
+                      disabled={step.ts_ms == null}
+                      onClick={() => { if (step.ts_ms != null) { seekTo(step.ts_ms); setResultDialogOpen(false); } }}
+                      className={cn(
+                        "w-full h-auto flex items-center gap-3 px-2 py-1.5 justify-start",
+                        step.ts_ms != null && step.ts_ms <= currentMs && (steps[i + 1]?.ts_ms ?? Infinity) > currentMs
+                          ? "bg-accent"
+                          : ""
+                      )}
+                    >
+                      <span className="text-xs text-muted-foreground font-mono w-4 flex-shrink-0 text-right">{i + 1}</span>
+                      {step.framePath && videoServerPort > 0 ? (
+                        <img
+                          src={`http://127.0.0.1:${videoServerPort}${step.framePath}`}
+                          style={{ width: 80, height: 45, objectFit: "cover", flexShrink: 0 }}
+                          className="rounded bg-muted"
+                        />
+                      ) : (
+                        <div style={{ width: 80, height: 45, flexShrink: 0 }} className="rounded bg-muted" />
+                      )}
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-xs text-muted-foreground font-mono">
+                          {step.ts_ms != null ? formatMs(step.ts_ms) : "—"}
+                        </span>
+                        <span className="text-xs leading-snug">{step.description}</span>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              </ScrollArea>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* Events dialog */}
       <Dialog open={eventsDialogOpen} onOpenChange={setEventsDialogOpen}>
@@ -511,11 +610,12 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
           <ScrollArea className="flex-1">
             <div className="px-3 py-2">
               {displayEvents.map((ev, i) => (
-                <button
+                <Button
                   key={ev.id}
+                  variant="ghost"
                   onClick={() => { seekTo(ev.ts_ms); setEventsDialogOpen(false); }}
                   className={cn(
-                    "w-full flex items-center gap-3 px-2 py-1 rounded text-left hover:bg-accent transition-colors",
+                    "w-full h-auto flex items-center gap-3 px-2 py-1 justify-start",
                     ev.ts_ms <= currentMs && (displayEvents[i + 1]?.ts_ms ?? Infinity) > currentMs
                       ? "bg-accent"
                       : ""
@@ -535,7 +635,7 @@ export function RecordingPlayer({ videoPath, dbPath, cwd, activeSessionId, onSho
                       ? describeChromeEvent(ev as ChromeEvent)
                       : getRichLabel(ev as ActionEvent, chromeEvents)}
                   </span>
-                </button>
+                </Button>
               ))}
             </div>
           </ScrollArea>
