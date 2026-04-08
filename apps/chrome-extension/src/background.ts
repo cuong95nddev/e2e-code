@@ -51,27 +51,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // ---- Start ----
 
 async function handleStart(body: {
+  mode: "tab" | "picker";
   sessionId: string;
   startTime: number;
   targetTabId: number;
+  streamId?: string;
 }): Promise<{ ok: boolean }> {
-  const { sessionId, startTime, targetTabId } = body;
+  const { mode, sessionId, startTime, targetTabId, streamId } = body;
 
-  // Create the dedicated recording tab (pinned, starts active so chooseDesktopMedia works)
+  // Create the dedicated recording tab (pinned, active so getUserMedia / chooseDesktopMedia works)
   const recTab = await chrome.tabs.create({
     url: chrome.runtime.getURL("recording.html"),
     pinned: true,
     active: true,
   });
 
-  // Wait for it to fully load
   await waitForTabLoad(recTab.id!);
 
-  // Set in-memory session for event buffering
   currentSessionId = sessionId;
   eventBuffer = [];
 
-  // Persist state before the picker opens
   await chrome.storage.session.set({
     recording: true,
     targetTabId,
@@ -80,21 +79,24 @@ async function handleStart(body: {
     startTime,
   });
 
-  // Ensure content script is running on the target tab
   try {
     await chrome.scripting.executeScript({ target: { tabId: targetTabId }, files: ["content-script.js"] });
   } catch { /* already injected */ }
 
-  // Tell content script to begin capturing events
   try {
     await chrome.tabs.sendMessage(targetTabId, { name: "startEvents", sessionId, startTime });
   } catch (e) {
     console.warn("[bg] startEvents failed:", e);
   }
 
-  // Fire-and-forget: recording tab shows picker then starts MediaRecorder.
-  // It also switches the user back to targetTab once recording begins.
-  chrome.tabs.sendMessage(recTab.id!, { name: "doRecord", sessionId, targetTabId }).catch(() => {});
+  // For "tab" mode, streamId is already known — pass it so recording tab skips the picker.
+  // For "picker" mode, recording tab will call chooseDesktopMedia itself, then switch back.
+  chrome.tabs.sendMessage(recTab.id!, { name: "doRecord", mode, sessionId, targetTabId, streamId }).catch(() => {});
+
+  // For tab mode, switch back immediately (no picker to wait for)
+  if (mode === "tab") {
+    await chrome.tabs.update(targetTabId, { active: true });
+  }
 
   return { ok: true };
 }

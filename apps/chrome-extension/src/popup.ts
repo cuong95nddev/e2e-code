@@ -2,10 +2,13 @@ export {};
 
 const BRIDGE_URL = "http://localhost:7878";
 
-const btn = document.getElementById("btn") as HTMLButtonElement;
-const connDot = document.getElementById("conn-dot") as HTMLDivElement;
+const btnTab  = document.getElementById("btn-tab")  as HTMLButtonElement;
+const btnPick = document.getElementById("btn-pick") as HTMLButtonElement;
+const btnStop = document.getElementById("btn-stop") as HTMLButtonElement;
+const btnsEl  = document.getElementById("btns")     as HTMLDivElement;
+const connDot   = document.getElementById("conn-dot")   as HTMLDivElement;
 const connLabel = document.getElementById("conn-label") as HTMLSpanElement;
-const timerEl = document.getElementById("timer") as HTMLDivElement;
+const timerEl   = document.getElementById("timer")      as HTMLDivElement;
 
 let recording = false;
 let timerInterval: ReturnType<typeof setInterval> | null = null;
@@ -28,19 +31,25 @@ function stopTimer() {
 }
 
 function setUI(state: "idle" | "recording" | "busy" | "disconnected") {
-  btn.disabled = state === "busy" || state === "disconnected";
+  const isRecording = state === "recording";
+  const isBusy      = state === "busy";
+  const isDisconn   = state === "disconnected";
+
+  btnsEl.style.display  = isRecording ? "none" : "";
+  btnStop.style.display = isRecording ? "" : "none";
+
+  btnTab.disabled  = isBusy || isDisconn || isRecording;
+  btnPick.disabled = isBusy || isDisconn || isRecording;
+  btnStop.disabled = isBusy;
+
   if (state === "idle") {
-    btn.textContent = "Start Recording"; btn.className = "start";
     connDot.className = "dot connected"; connLabel.textContent = "Connected to e2e-code";
     stopTimer();
   } else if (state === "recording") {
-    btn.textContent = "Stop Recording"; btn.className = "stop";
     connDot.className = "dot recording"; connLabel.textContent = "Recording…";
   } else if (state === "busy") {
-    btn.textContent = btn.textContent; btn.className = "";
     connDot.className = "dot"; connLabel.textContent = "Working…";
   } else {
-    btn.textContent = "Start Recording"; btn.className = "start";
     connDot.className = "dot"; connLabel.textContent = "e2e-code app not running";
     stopTimer();
   }
@@ -65,29 +74,73 @@ async function init() {
   }
 }
 
-async function startRecording() {
-  setUI("busy");
-
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) { connLabel.textContent = "No active tab"; setUI("idle"); return; }
-
-  // Create session on bridge
-  let sessionId: string; let startTime: number;
+async function createSession(): Promise<{ sessionId: string; startTime: number } | null> {
   try {
     const res = await fetch(`${BRIDGE_URL}/session/start`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}), signal: AbortSignal.timeout(5000),
     });
-    ({ sessionId, startTime } = await res.json() as { sessionId: string; startTime: number });
-  } catch { connLabel.textContent = "Bridge error"; btn.disabled = false; return; }
+    return await res.json() as { sessionId: string; startTime: number };
+  } catch {
+    connLabel.textContent = "Bridge error";
+    return null;
+  }
+}
 
-  // Hand off to background — recording tab will show the source picker itself
+// Record current tab using tabCapture — stream ID obtained in popup then passed to recording tab
+async function startTabRecording() {
+  setUI("busy");
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) { connLabel.textContent = "No active tab"; setUI("idle"); return; }
+
+  // tabCapture must be called from popup (user gesture context)
+  let streamId: string;
+  try {
+    streamId = await new Promise<string>((resolve, reject) => {
+      chrome.tabCapture.getMediaStreamId({ targetTabId: tab.id }, (id) => {
+        if (chrome.runtime.lastError || !id) reject(chrome.runtime.lastError ?? new Error("no streamId"));
+        else resolve(id);
+      });
+    });
+  } catch (e) {
+    connLabel.textContent = `tabCapture failed: ${e}`; setUI("idle"); return;
+  }
+
+  const session = await createSession();
+  if (!session) { setUI("idle"); return; }
+  const { sessionId, startTime } = session;
+
   const result = await chrome.runtime.sendMessage({
     name: "startRecording",
-    body: { sessionId, startTime, targetTabId: tab.id },
+    body: { mode: "tab", streamId, sessionId, startTime, targetTabId: tab.id },
   }) as { ok: boolean; error?: string };
 
-  if (!result?.ok) { connLabel.textContent = result?.error ?? "Start failed"; btn.disabled = false; return; }
+  if (!result?.ok) { connLabel.textContent = result?.error ?? "Start failed"; setUI("idle"); return; }
+
+  recording = true;
+  setUI("recording");
+  startTimer(startTime);
+}
+
+// Let user pick any screen/window/tab via the native Chrome picker
+async function startPickerRecording() {
+  setUI("busy");
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) { connLabel.textContent = "No active tab"; setUI("idle"); return; }
+
+  const session = await createSession();
+  if (!session) { setUI("idle"); return; }
+  const { sessionId, startTime } = session;
+
+  // Recording tab will show the picker itself (popup can't keep the picker open)
+  const result = await chrome.runtime.sendMessage({
+    name: "startRecording",
+    body: { mode: "picker", sessionId, startTime, targetTabId: tab.id },
+  }) as { ok: boolean; error?: string };
+
+  if (!result?.ok) { connLabel.textContent = result?.error ?? "Start failed"; setUI("idle"); return; }
 
   recording = true;
   setUI("recording");
@@ -103,9 +156,8 @@ async function stopRecording() {
   setUI("idle");
 }
 
-btn.addEventListener("click", () => {
-  if (!recording) startRecording();
-  else stopRecording();
-});
+btnTab.addEventListener("click",  () => startTabRecording());
+btnPick.addEventListener("click", () => startPickerRecording());
+btnStop.addEventListener("click", () => stopRecording());
 
 init();

@@ -38,6 +38,7 @@
     font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
     letter-spacing: 0.05em;
   }
+  .btns { display: flex; flex-direction: column; gap: 5px; }
   button {
     width: 100%;
     padding: 6px 10px;
@@ -50,9 +51,11 @@
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
     line-height: 1.4;
+    text-align: left;
   }
   button:hover { background: #27272a; border-color: rgba(255,255,255,0.18); }
-  button.start { border-color: rgba(255,255,255,0.2); color: #fafafa; }
+  button.primary { border-color: rgba(255,255,255,0.2); color: #fafafa; }
+  button.secondary { color: #a1a1aa; font-size: 11px; padding: 5px 10px; }
   button.stop  { border-color: rgba(248,113,113,0.4); color: #f87171; background: rgba(248,113,113,0.08); }
   button.stop:hover { background: rgba(248,113,113,0.14); }
   button:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -70,7 +73,11 @@
     <span id="conn-label">Checking connection…</span>
   </div>
   <div class="timer" id="timer" style="display:none"></div>
-  <button id="btn" disabled>Start Recording</button>
+  <div class="btns" id="btns">
+    <button id="btn-tab" class="primary" disabled>⬤ Record Current Tab</button>
+    <button id="btn-pick" class="secondary" disabled>⊞ Choose Source…</button>
+  </div>
+  <button id="btn-stop" class="stop" style="display:none" disabled>◼ Stop Recording</button>
   <div class="events" id="event-count"></div>
   <script src="popup.js"></script>
 </body>
